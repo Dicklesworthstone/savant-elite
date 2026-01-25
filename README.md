@@ -348,7 +348,7 @@ USB HID devices speak a specific protocol, but manufacturers rarely document it.
 The programming logic tries multiple command formats automatically:
 
 ```
-fmt1-feat  →  fmt2-feat  →  fmt3-feat  →  fmt1-out  →  fmt2-out  →  fmt3-out  →  36-byte  →  vendor
+fmt1-feat  →  fmt2-feat  →  fmt1-out  →  fmt2-out  →  36-byte  →  vendor
 ```
 
 If the first format fails (PIPE error), it falls through to the next. This handles firmware variations and ensures programming succeeds across different device batches.
@@ -456,11 +456,10 @@ Different firmware versions may expect slightly different data layouts:
 |--------|-------------------|-------------|
 | fmt1 | Byte 0 = Command | `[CMD, pedal, mod, key, 0, 0, 0, 0]` |
 | fmt2 | Byte 0 = 0 | `[0, CMD, pedal, mod, key, 0, 0, 0]` |
-| fmt3 | Same as fmt1 | Retry with different report type |
 | 36-byte | Extended buffer | PI Engineering SDK default size |
 | vendor | Vendor request | Alternative transfer method |
 
-The tool tries Feature reports (`wValue = 0x0300`) first, then Output reports (`wValue = 0x0200`). Most devices respond to fmt1-out.
+The tool tries Feature reports (`wValue = 0x0300`) first, then Output reports (`wValue = 0x0200`). Most devices respond to fmt1-out (Output report with command as first byte).
 
 ### EEPROM Write Verification
 

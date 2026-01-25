@@ -954,7 +954,7 @@ fn main() -> Result<()> {
                     0,
                 ];
 
-                // Format 2: Report ID 0, then command
+                // Format 2: Report ID 0, then command in data
                 let cmd2 = [
                     0u8,
                     xkeys_protocol::CMD_SET_KEY_MACRO,
@@ -966,24 +966,8 @@ fn main() -> Result<()> {
                     0,
                 ];
 
-                // Format 3: Report ID = command
-                let cmd3 = [
-                    xkeys_protocol::CMD_SET_KEY_MACRO,
-                    pedal_idx,
-                    action.modifiers,
-                    action.key,
-                    0,
-                    0,
-                    0,
-                    0,
-                ];
-
-                // Try SET_REPORT with command as report ID (Feature report)
-                for (fmt_name, data) in [
-                    ("fmt1-feat", &cmd1[..]),
-                    ("fmt2-feat", &cmd2[..]),
-                    ("fmt3-feat", &cmd3[..]),
-                ] {
+                // Try SET_REPORT with Feature report type (0x03xx)
+                for (fmt_name, data) in [("fmt1-feat", &cmd1[..]), ("fmt2-feat", &cmd2[..])] {
                     let report_id = data[0] as u16;
                     let result = handle.write_control(
                         0x21,
@@ -1000,13 +984,9 @@ fn main() -> Result<()> {
                     }
                 }
 
-                // Try SET_REPORT with Output report type
+                // Try SET_REPORT with Output report type (0x02xx)
                 if !success {
-                    for (fmt_name, data) in [
-                        ("fmt1-out", &cmd1[..]),
-                        ("fmt2-out", &cmd2[..]),
-                        ("fmt3-out", &cmd3[..]),
-                    ] {
+                    for (fmt_name, data) in [("fmt1-out", &cmd1[..]), ("fmt2-out", &cmd2[..])] {
                         let report_id = data[0] as u16;
                         let result = handle.write_control(
                             0x21,
