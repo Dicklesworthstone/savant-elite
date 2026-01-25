@@ -34,11 +34,11 @@ impl PedalConfig {
         for line in content.lines() {
             let line = line.trim();
             if let Some(val) = line.strip_prefix("left=") {
-                left = val.to_string();
+                left = val.trim().to_string();
             } else if let Some(val) = line.strip_prefix("middle=") {
-                middle = val.to_string();
+                middle = val.trim().to_string();
             } else if let Some(val) = line.strip_prefix("right=") {
-                right = val.to_string();
+                right = val.trim().to_string();
             }
         }
         if !left.is_empty() && !middle.is_empty() && !right.is_empty() {

@@ -167,16 +167,6 @@ add_to_path() {
     log_info "Added ${install_dir} to PATH in ${shell_config}"
 }
 
-# Draw ASCII pedal
-draw_pedal() {
-    local color="$1"
-    local label="$2"
-    echo -e "${color}    ┌─────────┐${NC}"
-    echo -e "${color}   ╱           ╲${NC}"
-    echo -e "${color}  │  ${BOLD}${label}${NC}${color}  │${NC}"
-    echo -e "${color}  ╰─────────────╯${NC}"
-}
-
 # Main
 main() {
     echo ""
