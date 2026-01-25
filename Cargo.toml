@@ -4,6 +4,10 @@ version = "0.1.0"
 edition = "2021"
 description = "Kinesis Savant Elite foot pedal programmer for macOS"
 license = "MIT"
+repository = "https://github.com/Dicklesworthstone/savant-elite"
+readme = "README.md"
+keywords = ["kinesis", "foot-pedal", "usb", "hid", "macos"]
+categories = ["command-line-utilities", "hardware-support"]
 
 [dependencies]
 clap = { version = "4", features = ["derive"] }

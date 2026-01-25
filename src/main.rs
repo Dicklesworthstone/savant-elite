@@ -281,7 +281,9 @@ mod usb_hid {
 
 #[derive(Parser)]
 #[command(name = "savant")]
+#[command(version)]
 #[command(about = "Kinesis Savant Elite foot pedal programmer for macOS")]
+#[command(long_about = "Native macOS programmer for the discontinued Kinesis Savant Elite USB foot pedal.\n\nProgram your foot pedals directly via USB—no Windows VM, no 32-bit compatibility hacks.")]
 struct Cli {
     #[command(subcommand)]
     command: Commands,
