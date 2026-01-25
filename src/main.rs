@@ -631,10 +631,11 @@ fn main() -> Result<()> {
 
             let api = HidApi::new()?;
 
-            // Find the right interface
+            // Find the right interface (check both play and programming mode PIDs)
             for device_info in api.device_list() {
                 if device_info.vendor_id() == KINESIS_VID
-                    && device_info.product_id() == SAVANT_ELITE_PID
+                    && (device_info.product_id() == SAVANT_ELITE_PID
+                        || device_info.product_id() == PROGRAMMING_PID)
                     && device_info.interface_number() == interface
                 {
                     match device_info.open_device(&api) {
