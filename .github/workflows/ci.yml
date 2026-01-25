@@ -112,7 +112,7 @@ jobs:
           file target/${{ matrix.target }}/release/${{ matrix.artifact }}
           ls -la target/${{ matrix.target }}/release/${{ matrix.artifact }}
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         with:
           name: binary-${{ matrix.target }}
           path: target/${{ matrix.target }}/release/${{ matrix.artifact }}
