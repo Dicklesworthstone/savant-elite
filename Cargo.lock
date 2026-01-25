@@ -547,6 +547,7 @@ dependencies = [
  "clap",
  "hex",
  "hidapi",
+ "libusb1-sys",
  "rich_rust",
  "rusb",
 ]

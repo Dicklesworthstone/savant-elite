@@ -1,6 +1,6 @@
 [package]
 name = "savant-elite"
-version = "0.1.0"
+version = "0.1.2"
 edition = "2021"
 description = "Kinesis Savant Elite foot pedal programmer for macOS"
 license = "MIT"
@@ -13,6 +13,7 @@ categories = ["command-line-utilities", "hardware-support"]
 clap = { version = "4", features = ["derive"] }
 hidapi = "2"
 rusb = "0.9"
+libusb1-sys = { version = "0.7", features = ["vendored"] }
 anyhow = "1"
 hex = "0.4"
 rich_rust = "0.1"
