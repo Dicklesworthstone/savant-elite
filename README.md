@@ -328,6 +328,234 @@ savant probe
 
 ---
 
+## Design Philosophy
+
+### Direct Hardware Access Over Workarounds
+
+The Savant Elite stores key mappings in onboard EEPROM. Rather than intercepting keystrokes at the OS level (which requires background processes and introduces latency), `savant-elite` writes directly to the device's permanent storage. Once programmed, the pedal sends the correct keys natively—no software running, no daemon needed, no CPU cycles spent remapping.
+
+### Exhaustive Protocol Discovery
+
+USB HID devices speak a specific protocol, but manufacturers rarely document it. `savant-elite` was built through systematic reverse engineering:
+
+1. **Driver Analysis**: Extracting vendor/product IDs and protocol hints from Windows INF files
+2. **USB Capture**: Using Wireshark to capture programming sessions from the original Windows software
+3. **Protocol Fuzzing**: Systematically trying different command formats to find what works
+4. **Iterative Refinement**: Multiple transfer methods (feature reports, output reports, vendor requests) until the right one succeeds
+
+### Robustness Through Redundancy
+
+The programming logic tries multiple command formats automatically:
+
+```
+fmt1-feat  →  fmt2-feat  →  fmt3-feat  →  fmt1-out  →  fmt2-out  →  fmt3-out  →  36-byte  →  vendor
+```
+
+If the first format fails (PIPE error), it falls through to the next. This handles firmware variations and ensures programming succeeds across different device batches.
+
+### Minimal Dependencies
+
+The tool uses only what's necessary:
+
+| Crate | Purpose |
+|-------|---------|
+| `clap` | CLI argument parsing |
+| `hidapi` | HID device enumeration (Play mode) |
+| `rusb` | Raw USB access (Programming mode) |
+| `anyhow` | Error handling |
+| `hex` | Debug output formatting |
+
+No async runtime, no network access, no configuration files.
+
+---
+
+## USB Protocol Deep Dive
+
+### Device Identification
+
+The Savant Elite identifies itself differently based on mode:
+
+| Mode | Vendor ID | Product ID | USB Class |
+|------|-----------|------------|-----------|
+| Play | `0x05F3` | `0x030C` | HID (keyboard + mouse composite) |
+| Program | `0x05F3` | `0x0232` | HID (generic) |
+
+In Play mode, macOS sees a standard HID keyboard and can read input via `hidapi`. In Program mode, the device doesn't expose standard HID interfaces—we use `rusb` (libusb) for raw USB control transfers.
+
+### The X-keys Protocol
+
+The Savant Elite uses PI Engineering's X-keys protocol (the same family as X-keys keypads). Key commands:
+
+| Command | Byte | Purpose |
+|---------|------|---------|
+| `CMD_SET_KEY_MACRO` | `0xCC` | Set a pedal's key mapping |
+| `CMD_SAVE_TO_EEPROM` | `0xCE` | Persist changes to flash |
+| `CMD_GET_KEY_MACRO` | `0xCD` | Read current mapping (partially implemented) |
+| `CMD_GENERATE_DATA` | `0xB5` | Request device state |
+| `CMD_GET_DESCRIPTOR` | `0xC1` | Get device descriptor |
+
+### SET_KEY_MACRO Command Format
+
+```
+Byte 0: Command (0xCC)
+Byte 1: Pedal index (0=left, 1=middle, 2=right)
+Byte 2: HID modifier byte
+Byte 3: HID keycode
+Bytes 4-7: Reserved (zeros)
+```
+
+The modifier byte follows USB HID convention:
+
+```
+Bit 0: Left Control   (0x01)
+Bit 1: Left Shift     (0x02)
+Bit 2: Left Alt       (0x04)
+Bit 3: Left GUI/Cmd   (0x08)
+Bit 4: Right Control  (0x10)
+Bit 5: Right Shift    (0x20)
+Bit 6: Right Alt      (0x40)
+Bit 7: Right GUI/Cmd  (0x80)
+```
+
+### USB Control Transfer Details
+
+Programming uses HID SET_REPORT via USB control transfers:
+
+```
+bmRequestType: 0x21 (Host-to-device, Class, Interface)
+bRequest:      0x09 (SET_REPORT)
+wValue:        0x0200 | report_id (Output report type)
+wIndex:        Interface number (0)
+Data:          8-byte command buffer
+```
+
+The tool detaches the kernel driver if necessary (`handle.detach_kernel_driver()`) and claims the interface for exclusive access.
+
+---
+
+## How EEPROM Programming Works
+
+### The Programming Sequence
+
+1. **Mode Check**: Enumerate USB devices looking for VID `0x05F3`, PID `0x0232`
+2. **Device Open**: Get libusb handle, detach kernel driver if attached
+3. **Interface Claim**: Exclusively claim interface 0
+4. **Send Commands**: For each pedal:
+   - Build SET_KEY_MACRO command with modifier + keycode
+   - Send via USB control transfer
+   - Try multiple formats until one succeeds
+   - Brief delay between pedals (50ms)
+5. **Save to EEPROM**: Send CMD_SAVE_TO_EEPROM (0xCE)
+6. **Cleanup**: Release interface, device auto-closes
+
+### Why Multiple Command Formats?
+
+Different firmware versions may expect slightly different data layouts:
+
+| Format | Report ID Position | Data Layout |
+|--------|-------------------|-------------|
+| fmt1 | Byte 0 = Command | `[CMD, pedal, mod, key, 0, 0, 0, 0]` |
+| fmt2 | Byte 0 = 0 | `[0, CMD, pedal, mod, key, 0, 0, 0]` |
+| fmt3 | Same as fmt1 | Retry with different report type |
+| 36-byte | Extended buffer | PI Engineering SDK default size |
+| vendor | Vendor request | Alternative transfer method |
+
+The tool tries Feature reports (`wValue = 0x0300`) first, then Output reports (`wValue = 0x0200`). Most devices respond to fmt1-out.
+
+### EEPROM Write Verification
+
+After programming, the SAVE_TO_EEPROM command triggers a flash write cycle. The device doesn't provide explicit acknowledgment, but a successful control transfer indicates the command was received. The 200ms delay after saving ensures the write completes before releasing the interface.
+
+---
+
+## Key Parsing Algorithm
+
+### Input Processing
+
+Key combinations are parsed from human-readable strings:
+
+```
+"cmd+shift+c" → { modifiers: 0x0A, key: 0x06 }
+```
+
+The parser:
+1. Splits on `+` delimiter
+2. Processes all but the last token as modifiers
+3. Last token is the base key
+4. Accumulates modifier bits with OR operations
+
+### Modifier Resolution
+
+Multiple names map to the same modifier bit:
+
+```rust
+"cmd" | "command" | "gui" | "meta" | "super" → MOD_LEFT_GUI (0x08)
+"ctrl" | "control"                           → MOD_LEFT_CTRL (0x01)
+"shift"                                      → MOD_LEFT_SHIFT (0x02)
+"alt" | "option" | "opt"                     → MOD_LEFT_ALT (0x04)
+```
+
+### Key Code Lookup
+
+Keys are resolved to HID usage codes via a lookup table. Examples:
+
+```
+"a" → 0x04
+"c" → 0x06
+"v" → 0x19
+"f12" → 0x45
+"space" → 0x2C
+```
+
+The parser is case-insensitive and validates that each token resolves to a known modifier or key.
+
+---
+
+## Security Considerations
+
+### USB Device Access
+
+The tool requires sufficient permissions to:
+- Enumerate USB devices
+- Detach kernel drivers (may require root)
+- Send control transfers to raw USB endpoints
+
+On macOS, this typically requires running with `sudo` for the `program` command.
+
+### No Network Access
+
+`savant-elite` never accesses the network. All operations are local USB communication. The tool has no telemetry, no update checks, no external dependencies at runtime.
+
+### Device Safety
+
+The Savant Elite's firmware is read-only—the tool cannot modify it. Only the user-programmable EEPROM area is written to. The worst case scenario is programming unintended keys, which is easily corrected by reprogramming.
+
+### Checksum Verification
+
+Release binaries include SHA256 checksums and SLSA build provenance attestations, allowing verification that binaries match the source code.
+
+---
+
+## Why Rust?
+
+### Memory Safety
+
+USB protocol parsing involves raw byte manipulation. Rust's ownership system prevents buffer overflows and use-after-free bugs without runtime overhead.
+
+### Cross-Compilation
+
+Rust compiles to native binaries for both Apple Silicon (aarch64) and Intel (x86_64) Macs from the same codebase, with GitHub Actions handling the build matrix.
+
+### Excellent USB Libraries
+
+The `rusb` and `hidapi` crates provide mature, well-tested bindings to libusb and hidapi, abstracting platform-specific details while preserving low-level control when needed.
+
+### Error Handling
+
+Rust's `Result` type and the `anyhow` crate enable clear error propagation with context. Every fallible operation produces actionable error messages rather than silent failures.
+
+---
+
 ## Troubleshooting
 
 ### "No Savant Elite device found"
@@ -389,6 +617,40 @@ The EEPROM was programmed but you may still be in Program mode.
 | Read current config | ⚠️ Partial | Detection works, readback WIP |
 | Multi-key macros | ❌ Not supported | Hardware limitation |
 | Mouse button output | ❌ Not implemented | Possible but not done |
+
+---
+
+## History & Background
+
+### The Kinesis Savant Elite
+
+The Savant Elite is a three-pedal USB foot controller manufactured by Kinesis (known for their ergonomic keyboards). It was designed for users who wanted hands-free keyboard shortcuts—ideal for transcriptionists, video editors, and programmers with RSI.
+
+The hardware was actually manufactured by PI Engineering (makers of X-keys products) and rebranded by Kinesis. This explains why it uses the PI Engineering USB vendor ID (`0x05F3`) and speaks the X-keys protocol.
+
+### The Programming Problem
+
+The Savant Elite was designed to be user-programmable via Windows software called "SmartSet." Unfortunately:
+
+- SmartSet was 32-bit only
+- Microsoft removed 32-bit app support in Windows on ARM
+- Apple removed 32-bit app support in macOS Catalina (2019)
+- Kinesis discontinued the product around 2015
+
+This left users with pedals that could only send whatever keys were programmed at the factory, unless they maintained a legacy Windows system.
+
+### Common Workarounds (Before This Tool)
+
+| Approach | Downsides |
+|----------|-----------|
+| Windows VM | Requires Windows license, VM software, significant overhead |
+| Old Mac/PC | Maintaining legacy hardware just for one tool |
+| Karabiner-Elements | Requires background process, added latency, complex configuration |
+| hidutil remapping | Limited to key-to-key (no modifier combinations) |
+
+### The Solution: Reverse Engineering
+
+By analyzing the Windows driver files, capturing USB traffic, and testing X-keys protocol commands, it's possible to program the device directly from modern macOS. The pedal stores its configuration in EEPROM, so once programmed, it works natively with zero software overhead.
 
 ---
 
