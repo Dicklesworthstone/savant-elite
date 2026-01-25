@@ -140,12 +140,11 @@ macOS has no native support for reprogramming the device. Options:
 
 - [x] Device detection (play mode)
 - [x] Device detection (programming mode)
-- [x] Karabiner-Elements config generation
-- [x] Monitor pedal input
+- [x] Monitor pedal input (play mode)
 - [x] X-keys protocol constants
-- [ ] Actual EEPROM programming (needs device in programming mode to test)
+- [x] Actual EEPROM programming (programming mode, via libusb SET_REPORT; multiple formats)
 - [ ] Read current configuration
-- [ ] Protocol verification with device in programming mode
+- [ ] Protocol verification across firmware revisions
 
 ## Testing Notes
 

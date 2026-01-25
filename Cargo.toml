@@ -15,6 +15,7 @@ hidapi = "2"
 rusb = "0.9"
 anyhow = "1"
 hex = "0.4"
+rich_rust = "0.1"
 
 [[bin]]
 name = "savant"

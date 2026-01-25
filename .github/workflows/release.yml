@@ -184,8 +184,10 @@ jobs:
 
             ### Verify Checksums
             ```bash
-            curl -fsSL https://github.com/${{ github.repository }}/releases/download/${{ steps.version.outputs.version }}/SHA256SUMS
-            shasum -a 256 -c SHA256SUMS
+            ASSET=savant-darwin-arm64.tar.xz  # or: savant-darwin-amd64.tar.xz
+            curl -fsSL "https://github.com/${{ github.repository }}/releases/download/${{ steps.version.outputs.version }}/${ASSET}" -o "${ASSET}"
+            curl -fsSL "https://github.com/${{ github.repository }}/releases/download/${{ steps.version.outputs.version }}/SHA256SUMS" -o SHA256SUMS
+            shasum -a 256 -c SHA256SUMS --ignore-missing
             ```
 
             ## What's Changed
@@ -204,14 +206,15 @@ jobs:
           VERSION="${{ needs.release.outputs.version }}"
 
           echo "Downloading release artifacts..."
-          curl -fsSL "https://github.com/${{ github.repository }}/releases/download/${VERSION}/savant-darwin-arm64.tar.xz" -o savant.tar.xz
-          curl -fsSL "https://github.com/${{ github.repository }}/releases/download/${VERSION}/savant-darwin-arm64.tar.xz.sha256" -o savant.tar.xz.sha256
+          ASSET=savant-darwin-arm64.tar.xz
+          curl -fsSL "https://github.com/${{ github.repository }}/releases/download/${VERSION}/${ASSET}" -o "${ASSET}"
+          curl -fsSL "https://github.com/${{ github.repository }}/releases/download/${VERSION}/${ASSET}.sha256" -o "${ASSET}.sha256"
 
           echo "Verifying checksum..."
-          shasum -a 256 -c savant.tar.xz.sha256
+          shasum -a 256 -c "${ASSET}.sha256"
 
           echo "Extracting..."
-          tar -xJf savant.tar.xz
+          tar -xJf "${ASSET}"
 
           echo "Testing binary..."
           ./savant --help

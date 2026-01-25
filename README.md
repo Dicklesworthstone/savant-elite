@@ -27,8 +27,11 @@ curl -fsSL https://github.com/Dicklesworthstone/savant-elite/releases/latest/dow
 
 **Verify Checksum (optional)**
 ```bash
-curl -fsSL https://github.com/Dicklesworthstone/savant-elite/releases/latest/download/SHA256SUMS
-shasum -a 256 -c SHA256SUMS
+ASSET=savant-darwin-arm64.tar.xz  # or: savant-darwin-amd64.tar.xz
+curl -fsSL "https://github.com/Dicklesworthstone/savant-elite/releases/latest/download/${ASSET}" -o "${ASSET}"
+curl -fsSL https://github.com/Dicklesworthstone/savant-elite/releases/latest/download/SHA256SUMS -o SHA256SUMS
+shasum -a 256 -c SHA256SUMS --ignore-missing
+tar -xJf "${ASSET}" && sudo mv savant /usr/local/bin/
 ```
 
 </div>

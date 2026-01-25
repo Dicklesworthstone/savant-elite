@@ -32,6 +32,11 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
 
+      - name: Install native dependencies (Linux)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libusb-1.0-0-dev libudev-dev pkg-config
+
       - name: Check formatting
         run: cargo fmt --all -- --check
 
