@@ -180,16 +180,15 @@ draw_pedal() {
 # Main
 main() {
     echo ""
-    echo -e "${BOLD}${CYAN}╔═══════════════════════════════════════════════════════════════════╗${NC}"
-    echo -e "${BOLD}${CYAN}║${NC}                                                                   ${BOLD}${CYAN}║${NC}"
-    echo -e "${BOLD}${CYAN}║${NC}   ${BOLD}SAVANT ELITE${NC}  —  Kinesis Foot Pedal Programmer for macOS      ${BOLD}${CYAN}║${NC}"
-    echo -e "${BOLD}${CYAN}║${NC}                                                                   ${BOLD}${CYAN}║${NC}"
-    echo -e "${BOLD}${CYAN}╚═══════════════════════════════════════════════════════════════════╝${NC}"
+    echo -e "${BOLD}${CYAN}╔════════════════════════════════════════════════════════════════╗${NC}"
+    echo -e "${BOLD}${CYAN}║${NC}                                                                ${BOLD}${CYAN}║${NC}"
+    echo -e "${BOLD}${CYAN}║${NC}   ${BOLD}SAVANT ELITE${NC}  -  Kinesis Foot Pedal Programmer for macOS   ${BOLD}${CYAN}║${NC}"
+    echo -e "${BOLD}${CYAN}║${NC}                                                                ${BOLD}${CYAN}║${NC}"
+    echo -e "${BOLD}${CYAN}╚════════════════════════════════════════════════════════════════╝${NC}"
     echo ""
-    echo -e "       ${RED}┌───────┐${NC}      ${YELLOW}┌───────┐${NC}      ${GREEN}┌───────┐${NC}"
-    echo -e "      ${RED}╱         ╲${NC}    ${YELLOW}╱         ╲${NC}    ${GREEN}╱         ╲${NC}"
-    echo -e "     ${RED}│  ${BOLD}LEFT${NC}${RED}   │${NC}  ${YELLOW}│ ${BOLD}MIDDLE${NC}${YELLOW}  │${NC}  ${GREEN}│  ${BOLD}RIGHT${NC}${GREEN} │${NC}"
-    echo -e "     ${RED}╰───────────╯${NC}  ${YELLOW}╰───────────╯${NC}  ${GREEN}╰───────────╯${NC}"
+    echo -e "    ${RED}┌─────────┐${NC}      ${YELLOW}┌─────────┐${NC}      ${GREEN}┌─────────┐${NC}"
+    echo -e "    ${RED}│  ${BOLD}LEFT${NC}${RED}   │${NC}      ${YELLOW}│ ${BOLD}MIDDLE${NC}${YELLOW}  │${NC}      ${GREEN}│  ${BOLD}RIGHT${NC}${GREEN}  │${NC}"
+    echo -e "    ${RED}└─────────┘${NC}      ${YELLOW}└─────────┘${NC}      ${GREEN}└─────────┘${NC}"
     echo ""
 
     # Detect platform
