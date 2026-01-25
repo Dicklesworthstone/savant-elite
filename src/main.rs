@@ -524,7 +524,7 @@ impl SavantElite {
             "[bold #ff6b6b]║[/]                                                          [bold #ff6b6b]║[/]",
         );
         self.console.print(
-            "[bold #ff6b6b]║[/]   [bold #4ecdc4]SAVANT ELITE[/]  [dim]-[/]  [bold #ffe66d]Kinesis Foot Pedal Programmer[/]     [bold #ff6b6b]║[/]",
+            "[bold #ff6b6b]║[/]   [bold #4ecdc4]SAVANT ELITE[/]  [dim]-[/]  [bold #ffe66d]Kinesis Foot Pedal Programmer[/]         [bold #ff6b6b]║[/]",
         );
         self.console.print(
             "[bold #ff6b6b]║[/]                                                          [bold #ff6b6b]║[/]",
@@ -682,7 +682,7 @@ impl SavantElite {
                 "[bold #3498db]┌──────────────────────────────────────────────────────────┐[/]",
             );
             self.console.print(
-                "[bold #3498db]│[/]  [bold #f39c12]⚡[/] [bold white]DEVICE DETECTED[/]                                    [bold #3498db]│[/]",
+                "[bold #3498db]│[/]  [bold #2ecc71]✓[/] [bold white]DEVICE DETECTED[/]                                     [bold #3498db]│[/]",
             );
             self.console.print(
                 "[bold #3498db]└──────────────────────────────────────────────────────────┘[/]",
@@ -759,7 +759,7 @@ impl SavantElite {
                 "[bold #e74c3c]┌──────────────────────────────────────────────────────────┐[/]",
             );
             self.console.print(
-                "[bold #e74c3c]│[/]  [bold #e74c3c]✗[/] [bold white]NO DEVICE FOUND[/]                                   [bold #e74c3c]│[/]",
+                "[bold #e74c3c]│[/]  [bold #e74c3c]✗[/] [bold white]NO DEVICE FOUND[/]                                    [bold #e74c3c]│[/]",
             );
             self.console.print(
                 "[bold #e74c3c]└──────────────────────────────────────────────────────────┘[/]",
