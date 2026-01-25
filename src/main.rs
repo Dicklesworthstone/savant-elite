@@ -42,7 +42,11 @@ impl PedalConfig {
             }
         }
         if !left.is_empty() && !middle.is_empty() && !right.is_empty() {
-            Some(Self { left, middle, right })
+            Some(Self {
+                left,
+                middle,
+                right,
+            })
         } else {
             None
         }
@@ -53,7 +57,10 @@ impl PedalConfig {
         if let Some(parent) = path.parent() {
             fs::create_dir_all(parent)?;
         }
-        let content = format!("left={}\nmiddle={}\nright={}\n", self.left, self.middle, self.right);
+        let content = format!(
+            "left={}\nmiddle={}\nright={}\n",
+            self.left, self.middle, self.right
+        );
         fs::write(&path, content)?;
         Ok(())
     }
@@ -511,9 +518,8 @@ impl SavantElite {
 
     fn print_banner(&self) {
         self.console.print("");
-        self.console.print(
-            "[bold #ff6b6b]╔══════════════════════════════════════════════════════════╗[/]",
-        );
+        self.console
+            .print("[bold #ff6b6b]╔══════════════════════════════════════════════════════════╗[/]");
         self.console.print(
             "[bold #ff6b6b]║[/]                                                          [bold #ff6b6b]║[/]",
         );
@@ -523,9 +529,8 @@ impl SavantElite {
         self.console.print(
             "[bold #ff6b6b]║[/]                                                          [bold #ff6b6b]║[/]",
         );
-        self.console.print(
-            "[bold #ff6b6b]╚══════════════════════════════════════════════════════════╝[/]",
-        );
+        self.console
+            .print("[bold #ff6b6b]╚══════════════════════════════════════════════════════════╝[/]");
         self.console.print("");
     }
 
@@ -578,15 +583,13 @@ impl SavantElite {
         let right_display = center(&right_key, 7);
 
         self.console.print("");
-        self.console.print(
-            "[bold #9b59b6]┌──────────────────────────────────────────────────────────┐[/]",
-        );
+        self.console
+            .print("[bold #9b59b6]┌──────────────────────────────────────────────────────────┐[/]");
         self.console.print(
             "[bold #9b59b6]│[/]           [bold white]YOUR PEDAL CONFIGURATION[/]                   [bold #9b59b6]│[/]",
         );
-        self.console.print(
-            "[bold #9b59b6]└──────────────────────────────────────────────────────────┘[/]",
-        );
+        self.console
+            .print("[bold #9b59b6]└──────────────────────────────────────────────────────────┘[/]");
         self.console.print("");
 
         // Top of pedals
