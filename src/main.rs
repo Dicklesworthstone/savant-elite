@@ -617,9 +617,8 @@ impl SavantElite {
         self.console.print(
             "            [#e74c3c]│[/]                  [#f39c12]│[/]                  [#2ecc71]│[/]",
         );
-        self.console.print(
-            "       [dim]═════╧══════════════════╧══════════════════╧═════[/]",
-        );
+        self.console
+            .print("       [dim]═════╧══════════════════╧══════════════════╧═════[/]");
         self.console.print("");
     }
 
@@ -1341,7 +1340,14 @@ impl SavantElite {
         Ok(())
     }
 
-    fn program(&self, left: &str, middle: &str, right: &str, dry_run: bool, auto_monitor: bool) -> Result<()> {
+    fn program(
+        &self,
+        left: &str,
+        middle: &str,
+        right: &str,
+        dry_run: bool,
+        auto_monitor: bool,
+    ) -> Result<()> {
         self.print_banner();
 
         self.console.print(
@@ -1407,9 +1413,8 @@ impl SavantElite {
                 );
                 self.console
                     .print("    [bold #3498db]4.[/] Unplug and replug the USB cable");
-                self.console.print(
-                    "    [bold #3498db]5.[/] Run [bold #f1c40f]savant program[/] again",
-                );
+                self.console
+                    .print("    [bold #3498db]5.[/] Run [bold #f1c40f]savant program[/] again");
             } else {
                 self.console.print(
                     "  [bold #e74c3c]✗[/] Savant Elite not found. Make sure it's connected.",
@@ -1912,11 +1917,11 @@ impl SavantElite {
                 "[bold #9b59b6]└─────────────────────────────────────────────────────────────────┘[/]",
             );
             self.console.print("");
-            self.console.print(
-                "  [#95a5a6]Switch to Play mode, replug USB, then press pedals to test.[/]",
-            );
             self.console
-                .print("  [#95a5a6]Press[/] [bold #e74c3c]Ctrl+C[/] [#95a5a6]to stop monitoring.[/]");
+                .print("  [#95a5a6]Switch to Play mode, replug USB, then press pedals to test.[/]");
+            self.console.print(
+                "  [#95a5a6]Press[/] [bold #e74c3c]Ctrl+C[/] [#95a5a6]to stop monitoring.[/]",
+            );
             self.console.print("");
 
             // Run monitor indefinitely (user presses Ctrl+C to stop)
