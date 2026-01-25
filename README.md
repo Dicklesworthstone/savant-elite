@@ -15,24 +15,29 @@ Program your foot pedals directly via USB—no Windows VM, no 32-bit compatibili
 
 ### Quick Install
 
-**macOS (Apple Silicon)**
 ```bash
-curl -fsSL https://github.com/Dicklesworthstone/savant-elite/releases/latest/download/savant-darwin-arm64.tar.xz | tar -xJ && sudo mv savant /usr/local/bin/
+curl -fsSL https://raw.githubusercontent.com/Dicklesworthstone/savant-elite/master/install.sh | bash
 ```
 
-**macOS (Intel)**
-```bash
-curl -fsSL https://github.com/Dicklesworthstone/savant-elite/releases/latest/download/savant-darwin-amd64.tar.xz | tar -xJ && sudo mv savant /usr/local/bin/
-```
+Auto-detects Apple Silicon vs Intel, verifies checksums, installs to `~/.local/bin`.
 
-**Verify Checksum (optional)**
+<details>
+<summary>Manual install (Apple Silicon)</summary>
+
 ```bash
-ASSET=savant-darwin-arm64.tar.xz  # or: savant-darwin-amd64.tar.xz
-curl -fsSL "https://github.com/Dicklesworthstone/savant-elite/releases/latest/download/${ASSET}" -o "${ASSET}"
-curl -fsSL https://github.com/Dicklesworthstone/savant-elite/releases/latest/download/SHA256SUMS -o SHA256SUMS
-shasum -a 256 -c SHA256SUMS --ignore-missing
-tar -xJf "${ASSET}" && sudo mv savant /usr/local/bin/
+curl -fsSL https://github.com/Dicklesworthstone/savant-elite/releases/latest/download/savant-darwin-arm64.tar.xz | tar -xJ
+sudo mv savant /usr/local/bin/
 ```
+</details>
+
+<details>
+<summary>Manual install (Intel)</summary>
+
+```bash
+curl -fsSL https://github.com/Dicklesworthstone/savant-elite/releases/latest/download/savant-darwin-amd64.tar.xz | tar -xJ
+sudo mv savant /usr/local/bin/
+```
+</details>
 
 </div>
 
