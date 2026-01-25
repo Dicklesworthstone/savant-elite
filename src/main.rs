@@ -1,12 +1,7 @@
 use anyhow::{anyhow, Context, Result};
 use clap::{Parser, Subcommand};
 use hidapi::{HidApi, HidDevice};
-use rusb::{Device, DeviceHandle, GlobalContext};
-use serde::{Deserialize, Serialize};
-use serde_json::json;
-use std::fs;
-use std::path::PathBuf;
-use std::process::Command;
+use rusb::{Device, GlobalContext};
 use std::time::Duration;
 
 const KINESIS_VID: u16 = 0x05F3;
@@ -14,6 +9,8 @@ const SAVANT_ELITE_PID: u16 = 0x030C; // Normal "play" mode PID
 const PROGRAMMING_PID: u16 = 0x0232; // Programming mode PID (from driver INF)
 
 // PI Engineering X-keys protocol commands (used by Kinesis Savant Elite)
+// These constants document the full protocol even if not all are currently used.
+#[allow(dead_code)]
 mod xkeys_protocol {
     // Output report commands (sent to device)
     pub const CMD_GENERATE_DATA: u8 = 0xB5; // Request device state
@@ -28,10 +25,6 @@ mod xkeys_protocol {
     pub const CMD_GET_KEY_MACRO: u8 = 0xCD; // Get key macro
     pub const CMD_SAVE_TO_EEPROM: u8 = 0xCE; // Save to EEPROM
 
-    // Macro data structure for programming (reconstructed from RE)
-    // Based on HID scancode format: 0x07MMKK where MM=modifiers, KK=keycode
-    pub const HID_USAGE_PAGE_KEYBOARD: u32 = 0x07;
-
     // Pedal indices
     pub const PEDAL_LEFT: u8 = 0;
     pub const PEDAL_MIDDLE: u8 = 1;
@@ -40,6 +33,8 @@ mod xkeys_protocol {
 
 // USB HID keyboard usage codes
 // See: https://usb.org/sites/default/files/hut1_4.pdf (Section 10)
+// These constants document the full HID spec even if not all are currently used.
+#[allow(dead_code)]
 mod usb_hid {
     // Modifier keys (byte 0 of keyboard report)
     pub const MOD_LEFT_CTRL: u8 = 0x01;
@@ -303,127 +298,6 @@ enum Commands {
         duration: u64,
     },
 
-    /// Interactive setup: detect current keys and configure Karabiner-Elements
-    Setup {
-        /// Left pedal action (e.g., "cmd+c" for copy)
-        #[arg(long, default_value = "cmd+c")]
-        left: String,
-
-        /// Middle pedal action (e.g., "cmd+a" for select all)
-        #[arg(long, default_value = "cmd+a")]
-        middle: String,
-
-        /// Right pedal action (e.g., "cmd+v" for paste)
-        #[arg(long, default_value = "cmd+v")]
-        right: String,
-    },
-
-    /// Generate Karabiner-Elements configuration for pedal remapping
-    Karabiner {
-        /// Source key for left pedal (e.g., "left_arrow", "a", "f13")
-        #[arg(long)]
-        left_src: String,
-
-        /// Target action for left pedal (e.g., "cmd+c")
-        #[arg(long, default_value = "cmd+c")]
-        left_action: String,
-
-        /// Source key for middle pedal
-        #[arg(long)]
-        middle_src: String,
-
-        /// Target action for middle pedal
-        #[arg(long, default_value = "cmd+a")]
-        middle_action: String,
-
-        /// Source key for right pedal
-        #[arg(long)]
-        right_src: String,
-
-        /// Target action for right pedal
-        #[arg(long, default_value = "cmd+v")]
-        right_action: String,
-
-        /// Install the configuration (copy to Karabiner config directory)
-        #[arg(long)]
-        install: bool,
-    },
-
-    /// Quick apply with common factory defaults (left_arrow, right_arrow, mouse_click)
-    Apply {
-        /// Install Karabiner-Elements configuration
-        #[arg(long)]
-        install: bool,
-
-        /// Swap left and middle pedal order
-        #[arg(long)]
-        swap_left_middle: bool,
-    },
-
-    /// Show instructions for discovering what keys your pedals send
-    Detect,
-
-    /// Configure pedal key mappings using macOS hidutil (simple key-to-key only)
-    Remap {
-        /// Left pedal action (e.g., "cmd+c" for copy)
-        #[arg(long)]
-        left: Option<String>,
-
-        /// Middle pedal action (e.g., "cmd+a" for select all)
-        #[arg(long)]
-        middle: Option<String>,
-
-        /// Right pedal action (e.g., "cmd+v" for paste)
-        #[arg(long)]
-        right: Option<String>,
-
-        /// Clear all existing remappings
-        #[arg(long)]
-        clear: bool,
-    },
-
-    /// Show current hidutil key mappings for the foot pedal
-    ShowMappings,
-
-    /// Generate a launchd plist for persistent remapping
-    GeneratePlist {
-        /// Output file path
-        #[arg(
-            short,
-            long,
-            default_value = "~/Library/LaunchAgents/com.savant-elite.remap.plist"
-        )]
-        output: String,
-    },
-
-    /// Attempt to read device EEPROM configuration (experimental)
-    ReadConfig,
-
-    /// Attempt to write device EEPROM configuration (experimental)
-    WriteConfig {
-        /// Configuration in JSON format
-        #[arg(long)]
-        config: String,
-    },
-
-    /// Probe device for programming protocol (reverse engineering)
-    Probe,
-
-    /// Send raw HID command to device (expert mode)
-    RawCmd {
-        /// Command byte (hex, e.g., "b5" for generate data)
-        #[arg(long)]
-        cmd: String,
-
-        /// Additional data bytes (hex, e.g., "00010203")
-        #[arg(long, default_value = "")]
-        data: String,
-
-        /// Interface number (0=keyboard, 1=mouse)
-        #[arg(long, default_value = "0")]
-        interface: i32,
-    },
-
     /// Program the pedals (requires device in programming mode)
     Program {
         /// Left pedal action (e.g., "cmd+c" for copy)
@@ -445,9 +319,27 @@ enum Commands {
 
     /// Check if device is in programming mode
     Status,
+
+    /// Probe device for programming protocol (reverse engineering)
+    Probe,
+
+    /// Send raw HID command to device (expert mode)
+    RawCmd {
+        /// Command byte (hex, e.g., "b5" for generate data)
+        #[arg(long)]
+        cmd: String,
+
+        /// Additional data bytes (hex, e.g., "00010203")
+        #[arg(long, default_value = "")]
+        data: String,
+
+        /// Interface number (0=keyboard, 1=mouse)
+        #[arg(long, default_value = "0")]
+        interface: i32,
+    },
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 struct KeyAction {
     modifiers: u8,
     key: u8,
@@ -489,18 +381,17 @@ impl KeyAction {
     }
 }
 
-struct SavantElite {
-    _api: HidApi,
-}
+struct SavantElite;
 
 impl SavantElite {
     fn new() -> Result<Self> {
-        let api = HidApi::new().context("Failed to initialize HID API")?;
-        Ok(Self { _api: api })
+        // Verify HID API can be initialized
+        let _ = HidApi::new().context("Failed to initialize HID API")?;
+        Ok(Self)
     }
 
     fn find_device(&self) -> Result<()> {
-        let api = HidApi::new()?;
+        let api = HidApi::new().context("Failed to initialize HID API")?;
 
         for device in api.device_list() {
             if device.vendor_id() == KINESIS_VID && device.product_id() == SAVANT_ELITE_PID {
@@ -527,7 +418,7 @@ impl SavantElite {
     }
 
     fn open_keyboard_interface(&self) -> Result<HidDevice> {
-        let api = HidApi::new()?;
+        let api = HidApi::new().context("Failed to initialize HID API")?;
 
         // Find the keyboard interface (usage page 1, usage 6)
         for device in api.device_list() {
@@ -614,363 +505,6 @@ impl SavantElite {
     }
 }
 
-fn get_hidutil_mappings() -> Result<String> {
-    let output = Command::new("hidutil")
-        .args(["property", "--get", "UserKeyMapping"])
-        .output()
-        .context("Failed to run hidutil")?;
-
-    Ok(String::from_utf8_lossy(&output.stdout).to_string())
-}
-
-fn clear_hidutil_mappings() -> Result<()> {
-    let output = Command::new("hidutil")
-        .args(["property", "--set", r#"{"UserKeyMapping":[]}"#])
-        .output()
-        .context("Failed to run hidutil")?;
-
-    if !output.status.success() {
-        return Err(anyhow!(
-            "hidutil failed: {}",
-            String::from_utf8_lossy(&output.stderr)
-        ));
-    }
-
-    println!("Cleared all key mappings.");
-    Ok(())
-}
-
-fn generate_plist(output_path: &str, mappings: &[(u64, u64)]) -> Result<()> {
-    let expanded_path = output_path.replace("~", &std::env::var("HOME").unwrap_or_default());
-
-    let mapping_args: Vec<String> = mappings
-        .iter()
-        .map(|(src, dst)| {
-            format!(
-                r#"{{"HIDKeyboardModifierMappingSrc":{},"HIDKeyboardModifierMappingDst":{}}}"#,
-                src, dst
-            )
-        })
-        .collect();
-
-    let mapping_json = format!(r#"{{"UserKeyMapping":[{}]}}"#, mapping_args.join(","));
-
-    let plist = format!(
-        r#"<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-    <key>Label</key>
-    <string>com.savant-elite.remap</string>
-    <key>ProgramArguments</key>
-    <array>
-        <string>/usr/bin/hidutil</string>
-        <string>property</string>
-        <string>--set</string>
-        <string>{}</string>
-    </array>
-    <key>RunAtLoad</key>
-    <true/>
-</dict>
-</plist>
-"#,
-        mapping_json.replace('"', "&quot;")
-    );
-
-    std::fs::write(&expanded_path, plist).context("Failed to write plist file")?;
-    println!("Generated launchd plist at: {}", expanded_path);
-    println!("\nTo enable persistent remapping, run:");
-    println!("  launchctl load {}", expanded_path);
-
-    Ok(())
-}
-
-/// Convert a key name to Karabiner-Elements format
-fn to_karabiner_key(name: &str) -> &str {
-    match name.to_lowercase().as_str() {
-        "left_arrow" | "left" => "left_arrow",
-        "right_arrow" | "right" => "right_arrow",
-        "up_arrow" | "up" => "up_arrow",
-        "down_arrow" | "down" => "down_arrow",
-        "a" => "a",
-        "b" => "b",
-        "c" => "c",
-        "d" => "d",
-        "e" => "e",
-        "f" => "f",
-        "g" => "g",
-        "h" => "h",
-        "i" => "i",
-        "j" => "j",
-        "k" => "k",
-        "l" => "l",
-        "m" => "m",
-        "n" => "n",
-        "o" => "o",
-        "p" => "p",
-        "q" => "q",
-        "r" => "r",
-        "s" => "s",
-        "t" => "t",
-        "u" => "u",
-        "v" => "v",
-        "w" => "w",
-        "x" => "x",
-        "y" => "y",
-        "z" => "z",
-        "1" => "1",
-        "2" => "2",
-        "3" => "3",
-        "f1" => "f1",
-        "f2" => "f2",
-        "f3" => "f3",
-        "f4" => "f4",
-        "f5" => "f5",
-        "f6" => "f6",
-        "f7" => "f7",
-        "f8" => "f8",
-        "f9" => "f9",
-        "f10" => "f10",
-        "f11" => "f11",
-        "f12" => "f12",
-        "f13" => "f13",
-        "f14" => "f14",
-        "f15" => "f15",
-        "space" => "spacebar",
-        "enter" | "return" => "return_or_enter",
-        "tab" => "tab",
-        "escape" | "esc" => "escape",
-        "backspace" | "delete" => "delete_or_backspace",
-        _ => name,
-    }
-}
-
-/// Parse a key action string (e.g., "cmd+c") into Karabiner format
-fn parse_karabiner_action(action: &str) -> Result<serde_json::Value> {
-    let parts: Vec<&str> = action.split('+').collect();
-    let mut modifiers = Vec::new();
-    let mut key = "";
-
-    for (i, part) in parts.iter().enumerate() {
-        let part = part.trim().to_lowercase();
-        if i == parts.len() - 1 {
-            // Last part is the key
-            key = match part.as_str() {
-                "a" => "a",
-                "b" => "b",
-                "c" => "c",
-                "d" => "d",
-                "e" => "e",
-                "f" => "f",
-                "g" => "g",
-                "h" => "h",
-                "i" => "i",
-                "j" => "j",
-                "k" => "k",
-                "l" => "l",
-                "m" => "m",
-                "n" => "n",
-                "o" => "o",
-                "p" => "p",
-                "q" => "q",
-                "r" => "r",
-                "s" => "s",
-                "t" => "t",
-                "u" => "u",
-                "v" => "v",
-                "w" => "w",
-                "x" => "x",
-                "y" => "y",
-                "z" => "z",
-                "space" => "spacebar",
-                "enter" | "return" => "return_or_enter",
-                _ => return Err(anyhow!("Unknown key: {}", part)),
-            };
-        } else {
-            // Modifier
-            match part.as_str() {
-                "cmd" | "command" | "gui" | "meta" | "super" => modifiers.push("left_command"),
-                "ctrl" | "control" => modifiers.push("left_control"),
-                "shift" => modifiers.push("left_shift"),
-                "alt" | "option" | "opt" => modifiers.push("left_option"),
-                _ => return Err(anyhow!("Unknown modifier: {}", part)),
-            }
-        }
-    }
-
-    Ok(json!({
-        "key_code": key,
-        "modifiers": modifiers
-    }))
-}
-
-/// Generate Karabiner-Elements complex modifications configuration
-fn generate_karabiner_config(
-    left_src: &str,
-    left_action: &str,
-    middle_src: &str,
-    middle_action: &str,
-    right_src: &str,
-    right_action: &str,
-) -> Result<serde_json::Value> {
-    let mut rules = Vec::new();
-
-    // Left pedal
-    let left_to = parse_karabiner_action(left_action)?;
-    rules.push(json!({
-        "description": format!("Savant Elite: Left pedal ({}) -> {}", left_src, left_action),
-        "manipulators": [{
-            "type": "basic",
-            "from": {
-                "key_code": to_karabiner_key(left_src)
-            },
-            "to": [left_to],
-            "conditions": [{
-                "type": "device_if",
-                "identifiers": [{
-                    "vendor_id": KINESIS_VID,
-                    "product_id": SAVANT_ELITE_PID
-                }]
-            }]
-        }]
-    }));
-
-    // Middle pedal
-    let middle_to = parse_karabiner_action(middle_action)?;
-    rules.push(json!({
-        "description": format!("Savant Elite: Middle pedal ({}) -> {}", middle_src, middle_action),
-        "manipulators": [{
-            "type": "basic",
-            "from": {
-                "key_code": to_karabiner_key(middle_src)
-            },
-            "to": [middle_to],
-            "conditions": [{
-                "type": "device_if",
-                "identifiers": [{
-                    "vendor_id": KINESIS_VID,
-                    "product_id": SAVANT_ELITE_PID
-                }]
-            }]
-        }]
-    }));
-
-    // Right pedal - handle mouse click specially
-    if right_src.to_lowercase().contains("mouse") || right_src.to_lowercase().contains("click") {
-        // Mouse button - Karabiner can handle this with pointing_button
-        let right_to = parse_karabiner_action(right_action)?;
-        rules.push(json!({
-            "description": format!("Savant Elite: Right pedal (mouse button) -> {}", right_action),
-            "manipulators": [{
-                "type": "basic",
-                "from": {
-                    "pointing_button": "button2"  // Right mouse button
-                },
-                "to": [right_to],
-                "conditions": [{
-                    "type": "device_if",
-                    "identifiers": [{
-                        "vendor_id": KINESIS_VID,
-                        "product_id": SAVANT_ELITE_PID
-                    }]
-                }]
-            }]
-        }));
-    } else {
-        let right_to = parse_karabiner_action(right_action)?;
-        rules.push(json!({
-            "description": format!("Savant Elite: Right pedal ({}) -> {}", right_src, right_action),
-            "manipulators": [{
-                "type": "basic",
-                "from": {
-                    "key_code": to_karabiner_key(right_src)
-                },
-                "to": [right_to],
-                "conditions": [{
-                    "type": "device_if",
-                    "identifiers": [{
-                        "vendor_id": KINESIS_VID,
-                        "product_id": SAVANT_ELITE_PID
-                    }]
-                }]
-            }]
-        }));
-    }
-
-    Ok(json!({
-        "title": "Kinesis Savant Elite Foot Pedal",
-        "rules": rules
-    }))
-}
-
-fn install_karabiner_config(config: &serde_json::Value) -> Result<PathBuf> {
-    let home = std::env::var("HOME").context("HOME not set")?;
-    let config_dir = PathBuf::from(&home)
-        .join(".config")
-        .join("karabiner")
-        .join("assets")
-        .join("complex_modifications");
-
-    // Create directory if it doesn't exist
-    fs::create_dir_all(&config_dir).context("Failed to create Karabiner config directory")?;
-
-    let config_path = config_dir.join("savant-elite.json");
-    let config_str = serde_json::to_string_pretty(config)?;
-    fs::write(&config_path, config_str).context("Failed to write config file")?;
-
-    Ok(config_path)
-}
-
-fn print_detect_instructions() {
-    println!("=== Discovering Your Pedal Keys ===\n");
-    println!("Your Savant Elite foot pedal was pre-programmed with certain keys.");
-    println!("Common factory defaults are: Left Arrow, Right Arrow, and Right Mouse Click.\n");
-    println!("To find out what YOUR pedals send:\n");
-    println!("1. Open TextEdit (or any text editor)");
-    println!("2. Press each pedal one at a time");
-    println!("3. Note what appears or what action occurs:\n");
-    println!("   - If you see an arrow cursor move: it's sending arrow keys");
-    println!("   - If you see a letter appear: it's sending that key");
-    println!("   - If a context menu appears: it's sending mouse click\n");
-    println!("Common keys the Savant Elite might be programmed to:");
-    println!("  - left_arrow   (Left Arrow key)");
-    println!("  - right_arrow  (Right Arrow key)");
-    println!("  - mouse_click  (Right mouse button)");
-    println!("  - f13, f14, f15 (Function keys)");
-    println!("  - a, b, c, etc. (Letter keys)\n");
-    println!("Once you know what each pedal sends, run:");
-    println!(
-        "  savant karabiner --left-src <key> --middle-src <key> --right-src <key> --install\n"
-    );
-    println!("Example (if pedals send left/right arrows and mouse click):");
-    println!("  savant karabiner --left-src left_arrow --middle-src right_arrow --right-src mouse_click --install");
-}
-
-fn print_setup_instructions(left: &str, middle: &str, right: &str) {
-    println!("=== Savant Elite Foot Pedal Setup ===\n");
-    println!("Target configuration:");
-    println!("  Left pedal   -> {} (Copy)", left);
-    println!("  Middle pedal -> {} (Select All)", middle);
-    println!("  Right pedal  -> {} (Paste)", right);
-    println!();
-    println!("Step 1: Install Karabiner-Elements (if not already installed)");
-    println!("  brew install --cask karabiner-elements");
-    println!();
-    println!("Step 2: Discover what keys your pedals currently send");
-    println!("  savant detect");
-    println!();
-    println!("Step 3: Generate and install the configuration");
-    println!("  savant karabiner --left-src <key> --middle-src <key> --right-src <key> --install");
-    println!();
-    println!("Step 4: Enable in Karabiner-Elements");
-    println!("  Open Karabiner-Elements > Complex Modifications > Add Rule");
-    println!("  Enable the 'Kinesis Savant Elite Foot Pedal' rules");
-    println!();
-    println!("NOTE: The Savant Elite stores its key mappings in internal EEPROM.");
-    println!("The original programming software only works on 32-bit Windows.");
-    println!("This tool works around that by remapping at the OS level.");
-}
-
 fn main() -> Result<()> {
     let cli = Cli::parse();
     let savant = SavantElite::new()?;
@@ -984,186 +518,10 @@ fn main() -> Result<()> {
             savant.monitor(duration)?;
         }
 
-        Commands::Setup {
-            left,
-            middle,
-            right,
-        } => {
-            print_setup_instructions(&left, &middle, &right);
-        }
-
-        Commands::Detect => {
-            print_detect_instructions();
-        }
-
-        Commands::Karabiner {
-            left_src,
-            left_action,
-            middle_src,
-            middle_action,
-            right_src,
-            right_action,
-            install,
-        } => {
-            println!("Generating Karabiner-Elements configuration...\n");
-
-            let config = generate_karabiner_config(
-                &left_src,
-                &left_action,
-                &middle_src,
-                &middle_action,
-                &right_src,
-                &right_action,
-            )?;
-
-            if install {
-                let path = install_karabiner_config(&config)?;
-                println!("Configuration installed to: {}\n", path.display());
-                println!("To enable:");
-                println!("1. Open Karabiner-Elements");
-                println!("2. Go to Complex Modifications");
-                println!("3. Click 'Add rule'");
-                println!("4. Enable the 'Kinesis Savant Elite Foot Pedal' rules");
-            } else {
-                println!("{}", serde_json::to_string_pretty(&config)?);
-                println!("\nTo install, add --install flag");
-            }
-        }
-
-        Commands::Apply {
-            install,
-            swap_left_middle,
-        } => {
-            println!("=== Quick Apply: Common Factory Defaults ===\n");
-            println!("Assuming your pedals send:");
-            println!("  Left pedal:   Left Arrow");
-            println!("  Middle pedal: Right Arrow");
-            println!("  Right pedal:  Right Mouse Button\n");
-
-            let (left_src, middle_src) = if swap_left_middle {
-                ("right_arrow", "left_arrow")
-            } else {
-                ("left_arrow", "right_arrow")
-            };
-
-            println!("Configuring:");
-            println!("  Left pedal ({})   -> Cmd+C (Copy)", left_src);
-            println!("  Middle pedal ({}) -> Cmd+A (Select All)", middle_src);
-            println!("  Right pedal (mouse) -> Cmd+V (Paste)\n");
-
-            let config = generate_karabiner_config(
-                left_src,
-                "cmd+c",
-                middle_src,
-                "cmd+a",
-                "mouse_click",
-                "cmd+v",
-            )?;
-
-            if install {
-                let path = install_karabiner_config(&config)?;
-                println!("Configuration installed to: {}\n", path.display());
-                println!("NEXT STEPS:");
-                println!("1. Install Karabiner-Elements if not installed:");
-                println!("   brew install --cask karabiner-elements");
-                println!();
-                println!("2. Open Karabiner-Elements");
-                println!("3. Go to Complex Modifications tab");
-                println!("4. Click 'Add rule'");
-                println!("5. Enable the 'Kinesis Savant Elite Foot Pedal' rules");
-                println!();
-                println!("If your pedals aren't working after enabling:");
-                println!("  - Test what keys your pedals actually send using 'savant detect'");
-                println!("  - Then use 'savant karabiner' with the correct source keys");
-            } else {
-                println!("{}", serde_json::to_string_pretty(&config)?);
-                println!("\nTo install, run: savant apply --install");
-            }
-        }
-
-        Commands::Remap {
-            left,
-            middle,
-            right,
-            clear,
-        } => {
-            if clear {
-                clear_hidutil_mappings()?;
-            }
-
-            println!("Note: hidutil can only remap keys 1:1, not add modifiers.");
-            println!("For Cmd+C, Cmd+A, Cmd+V, use 'savant karabiner' instead.\n");
-
-            if let Some(ref action) = left {
-                let key = KeyAction::from_string(action)?;
-                println!(
-                    "Left pedal -> {} (key code: 0x{:02X}, modifiers: 0x{:02X})",
-                    action, key.key, key.modifiers
-                );
-            }
-            if let Some(ref action) = middle {
-                let key = KeyAction::from_string(action)?;
-                println!(
-                    "Middle pedal -> {} (key code: 0x{:02X}, modifiers: 0x{:02X})",
-                    action, key.key, key.modifiers
-                );
-            }
-            if let Some(ref action) = right {
-                let key = KeyAction::from_string(action)?;
-                println!(
-                    "Right pedal -> {} (key code: 0x{:02X}, modifiers: 0x{:02X})",
-                    action, key.key, key.modifiers
-                );
-            }
-        }
-
-        Commands::ShowMappings => {
-            let mappings = get_hidutil_mappings()?;
-            println!("Current hidutil key mappings:");
-            println!("{}", mappings);
-        }
-
-        Commands::GeneratePlist { output } => {
-            let mappings = vec![
-                (0x700000050, 0x700000006), // Left arrow -> C
-                (0x70000004F, 0x700000004), // Right arrow -> A
-            ];
-            generate_plist(&output, &mappings)?;
-        }
-
-        Commands::ReadConfig => {
-            println!("Attempting to read device EEPROM configuration...\n");
-
-            let device = savant.open_keyboard_interface()?;
-            let mut buf = [0u8; 64];
-
-            for report_id in 0..10u8 {
-                buf[0] = report_id;
-                match device.get_feature_report(&mut buf) {
-                    Ok(len) => {
-                        println!("Feature report {}: {} bytes", report_id, len);
-                        println!("  Data: {}", hex::encode(&buf[..len]));
-                    }
-                    Err(_) => {}
-                }
-            }
-
-            println!("\nNote: EEPROM reading is experimental.");
-        }
-
-        Commands::WriteConfig { config } => {
-            println!("Config: {}\n", config);
-            println!("Warning: Writing to device EEPROM is not implemented.");
-            println!("The protocol needs to be reverse-engineered first.");
-        }
-
         Commands::Probe => {
             println!("=== Probing Savant Elite for Programming Protocol ===\n");
 
             let api = HidApi::new()?;
-
-            // Check for programming mode PID (0x0232 from the driver INF)
-            let programming_pid: u16 = 0x0232;
 
             println!("Looking for devices...");
             for device_info in api.device_list() {
@@ -1182,7 +540,7 @@ fn main() -> Result<()> {
                         device_info.usage()
                     );
 
-                    if pid == programming_pid {
+                    if pid == PROGRAMMING_PID {
                         println!("  ** PROGRAMMING MODE DETECTED **");
                     }
 
@@ -1247,19 +605,12 @@ fn main() -> Result<()> {
             }
 
             println!("\n=== Protocol Notes ===");
-            println!("From savantconf (Linux):");
-            println!("  The device sends scancodes 0x700E0, 0x700E2 (modifiers) plus:");
-            println!("  - Left pedal:   0x70021 (key 4 with Ctrl+Alt)");
-            println!("  - Middle pedal: 0x70022 (key 5 with Ctrl+Alt)");
-            println!("  - Right pedal:  0x70023 (key 6 with Ctrl+Alt)");
-            println!("\nFrom driver INF:");
-            println!("  Programming mode uses PID 0x0232 (vs normal 0x030C)");
+            println!("Programming mode uses PID 0x0232 (vs normal 0x030C)");
             println!("\n=== TO ENTER PROGRAMMING MODE ===");
             println!("1. Flip the pedal over");
             println!("2. Look for a recessed switch near the Kinesis sticker");
             println!("3. Use a paperclip to flip it from 'Play' to 'Program'");
-            println!("4. Run 'savant probe' again - PID should change to 0x0232");
-            println!("\nAlternatively: Hold a pedal while connecting the USB cable");
+            println!("4. Unplug and replug USB, then run 'savant status'");
         }
 
         Commands::RawCmd {
@@ -1398,22 +749,22 @@ fn main() -> Result<()> {
             let mut found_play_hid = false;
 
             for device_info in api.device_list() {
-                if device_info.vendor_id() == KINESIS_VID {
-                    if device_info.product_id() == SAVANT_ELITE_PID {
-                        if !found_play_usb && !found_play_hid {
-                            found_play_hid = true;
-                            println!(
-                                "Found device in PLAY mode (PID 0x{:04X}) [via HID]",
-                                SAVANT_ELITE_PID
-                            );
-                        }
+                if device_info.vendor_id() == KINESIS_VID
+                    && device_info.product_id() == SAVANT_ELITE_PID
+                {
+                    if !found_play_usb && !found_play_hid {
+                        found_play_hid = true;
                         println!(
-                            "  Interface {}: Usage Page 0x{:04X}, Usage 0x{:04X}",
-                            device_info.interface_number(),
-                            device_info.usage_page(),
-                            device_info.usage()
+                            "Found device in PLAY mode (PID 0x{:04X}) [via HID]",
+                            SAVANT_ELITE_PID
                         );
                     }
+                    println!(
+                        "  Interface {}: Usage Page 0x{:04X}, Usage 0x{:04X}",
+                        device_info.interface_number(),
+                        device_info.usage_page(),
+                        device_info.usage()
+                    );
                 }
             }
 
@@ -1546,10 +897,7 @@ fn main() -> Result<()> {
 
             println!("Claimed interface {}", interface_num);
 
-            // Find the endpoints
-            let mut ep_out: Option<u8> = None;
-            let mut ep_in: Option<u8> = None;
-
+            // Log endpoint information for debugging
             for interface in config.interfaces() {
                 for desc in interface.descriptors() {
                     println!(
@@ -1561,14 +909,8 @@ fn main() -> Result<()> {
                     );
                     for ep in desc.endpoint_descriptors() {
                         let dir = match ep.direction() {
-                            rusb::Direction::Out => {
-                                ep_out = Some(ep.address());
-                                "OUT"
-                            }
-                            rusb::Direction::In => {
-                                ep_in = Some(ep.address());
-                                "IN"
-                            }
+                            rusb::Direction::Out => "OUT",
+                            rusb::Direction::In => "IN",
                         };
                         let transfer = match ep.transfer_type() {
                             rusb::TransferType::Control => "Control",

@@ -86,13 +86,13 @@ This tool sends X-keys protocol commands to program the EEPROM when in Program m
 
 ## How savant-elite Compares
 
-| Feature | savant-elite | Windows Software | Karabiner Workaround |
-|---------|--------------|------------------|---------------------|
-| Native EEPROM programming | ✅ Direct | ✅ Direct | ❌ OS-level remap |
-| Works on modern macOS | ✅ Native | ❌ Requires VM | ✅ Works |
-| Persists after unplug | ✅ Yes | ✅ Yes | ❌ Needs daemon |
-| Runtime overhead | ✅ None | ✅ None | ⚠️ Background process |
-| Any key combination | ✅ Full HID | ✅ Full | ⚠️ Limited |
+| Feature | savant-elite | Windows Software |
+|---------|--------------|------------------|
+| Native EEPROM programming | ✅ Direct | ✅ Direct |
+| Works on modern macOS | ✅ Native | ❌ Requires VM |
+| Persists after unplug | ✅ Yes | ✅ Yes |
+| Runtime overhead | ✅ None | ✅ None |
+| Any key combination | ✅ Full HID | ✅ Full |
 
 **When to use savant-elite:**
 - You have a Kinesis Savant Elite foot pedal
@@ -100,7 +100,6 @@ This tool sends X-keys protocol commands to program the EEPROM when in Program m
 - You want permanent programming with zero runtime overhead
 
 **When savant-elite might not be ideal:**
-- You need per-application mappings (use Karabiner instead)
 - You want to change mappings frequently without flipping the physical switch
 
 ---
@@ -264,14 +263,6 @@ Deep protocol probing for reverse engineering.
 savant probe
 ```
 
-### `savant karabiner`
-
-Generate Karabiner-Elements configuration (workaround for Play mode).
-
-```bash
-savant karabiner --left-src "4" --middle-src "5" --right-src "6" --install
-```
-
 ---
 
 ## Key Mapping Reference
@@ -387,7 +378,7 @@ The EEPROM was programmed but you may still be in Program mode.
 ### What savant-elite Doesn't Do
 
 - **No macro recording**: Only single key + modifiers (not sequences)
-- **No per-application mappings**: Use Karabiner-Elements for that
+- **No per-application mappings**: Device programming is global
 - **No LED control**: The Savant Elite doesn't have programmable LEDs
 - **No Windows/Linux support**: macOS only (PRs welcome for other platforms)
 
