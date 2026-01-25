@@ -5,7 +5,59 @@ use rich_rust::markup;
 use rich_rust::prelude::*;
 use rich_rust::r#box::ROUNDED;
 use rusb::{Device, GlobalContext};
+use std::fs;
+use std::path::PathBuf;
 use std::time::Duration;
+
+/// Pedal configuration stored on disk (device EEPROM is write-only)
+#[derive(Clone)]
+struct PedalConfig {
+    left: String,
+    middle: String,
+    right: String,
+}
+
+impl PedalConfig {
+    fn config_path() -> PathBuf {
+        let config_dir = dirs::config_dir()
+            .unwrap_or_else(|| PathBuf::from("."))
+            .join("savant-elite");
+        config_dir.join("pedals.conf")
+    }
+
+    fn load() -> Option<Self> {
+        let path = Self::config_path();
+        let content = fs::read_to_string(&path).ok()?;
+        let mut left = String::new();
+        let mut middle = String::new();
+        let mut right = String::new();
+        for line in content.lines() {
+            let line = line.trim();
+            if let Some(val) = line.strip_prefix("left=") {
+                left = val.to_string();
+            } else if let Some(val) = line.strip_prefix("middle=") {
+                middle = val.to_string();
+            } else if let Some(val) = line.strip_prefix("right=") {
+                right = val.to_string();
+            }
+        }
+        if !left.is_empty() && !middle.is_empty() && !right.is_empty() {
+            Some(Self { left, middle, right })
+        } else {
+            None
+        }
+    }
+
+    fn save(&self) -> Result<()> {
+        let path = Self::config_path();
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent)?;
+        }
+        let content = format!("left={}\nmiddle={}\nright={}\n", self.left, self.middle, self.right);
+        fs::write(&path, content)?;
+        Ok(())
+    }
+}
 
 const KINESIS_VID: u16 = 0x05F3;
 const SAVANT_ELITE_PID: u16 = 0x030C; // Normal "play" mode PID
@@ -458,55 +510,21 @@ impl SavantElite {
     }
 
     fn print_banner(&self) {
-        // All lines are exactly 65 characters for proper alignment
         self.console.print("");
         self.console.print(
-            "[bold #ff6b6b]╔═══════════════════════════════════════════════════════════════╗[/]",
+            "[bold #ff6b6b]╔══════════════════════════════════════════════════════════╗[/]",
         );
         self.console.print(
-            "[bold #ff6b6b]║[/][bold #4ecdc4]  ███████╗ █████╗ ██╗   ██╗ █████╗ ███╗   ██╗████████╗         [/][bold #ff6b6b]║[/]",
+            "[bold #ff6b6b]║[/]                                                          [bold #ff6b6b]║[/]",
         );
         self.console.print(
-            "[bold #ff6b6b]║[/][bold #4ecdc4]  ██╔════╝██╔══██╗██║   ██║██╔══██╗████╗  ██║╚══██╔══╝         [/][bold #ff6b6b]║[/]",
+            "[bold #ff6b6b]║[/]   [bold #4ecdc4]SAVANT ELITE[/]  [dim]-[/]  [bold #ffe66d]Kinesis Foot Pedal Programmer[/]     [bold #ff6b6b]║[/]",
         );
         self.console.print(
-            "[bold #ff6b6b]║[/][bold #4ecdc4]  ███████╗███████║██║   ██║███████║██╔██╗ ██║   ██║            [/][bold #ff6b6b]║[/]",
+            "[bold #ff6b6b]║[/]                                                          [bold #ff6b6b]║[/]",
         );
         self.console.print(
-            "[bold #ff6b6b]║[/][bold #4ecdc4]  ╚════██║██╔══██║╚██╗ ██╔╝██╔══██║██║╚██╗██║   ██║            [/][bold #ff6b6b]║[/]",
-        );
-        self.console.print(
-            "[bold #ff6b6b]║[/][bold #4ecdc4]  ███████║██║  ██║ ╚████╔╝ ██║  ██║██║ ╚████║   ██║            [/][bold #ff6b6b]║[/]",
-        );
-        self.console.print(
-            "[bold #ff6b6b]║[/][bold #4ecdc4]  ╚══════╝╚═╝  ╚═╝  ╚═══╝  ╚═╝  ╚═╝╚═╝  ╚═══╝   ╚═╝            [/][bold #ff6b6b]║[/]",
-        );
-        self.console.print(
-            "[bold #ff6b6b]║[/][bold #ffe66d]              ███████╗██╗     ██╗████████╗███████╗             [/][bold #ff6b6b]║[/]",
-        );
-        self.console.print(
-            "[bold #ff6b6b]║[/][bold #ffe66d]              ██╔════╝██║     ██║╚══██╔══╝██╔════╝             [/][bold #ff6b6b]║[/]",
-        );
-        self.console.print(
-            "[bold #ff6b6b]║[/][bold #ffe66d]              █████╗  ██║     ██║   ██║   █████╗               [/][bold #ff6b6b]║[/]",
-        );
-        self.console.print(
-            "[bold #ff6b6b]║[/][bold #ffe66d]              ██╔══╝  ██║     ██║   ██║   ██╔══╝               [/][bold #ff6b6b]║[/]",
-        );
-        self.console.print(
-            "[bold #ff6b6b]║[/][bold #ffe66d]              ███████╗███████╗██║   ██║   ███████╗             [/][bold #ff6b6b]║[/]",
-        );
-        self.console.print(
-            "[bold #ff6b6b]║[/][bold #ffe66d]              ╚══════╝╚══════╝╚═╝   ╚═╝   ╚══════╝             [/][bold #ff6b6b]║[/]",
-        );
-        self.console.print(
-            "[bold #ff6b6b]║[/]                                                               [bold #ff6b6b]║[/]",
-        );
-        self.console.print(
-            "[bold #ff6b6b]║[/]   [dim #95a5a6]Kinesis Foot Pedal Programmer[/] [bold #e74c3c]◆[/] [dim #95a5a6]Native macOS USB[/]            [bold #ff6b6b]║[/]",
-        );
-        self.console.print(
-            "[bold #ff6b6b]╚═══════════════════════════════════════════════════════════════╝[/]",
+            "[bold #ff6b6b]╚══════════════════════════════════════════════════════════╝[/]",
         );
         self.console.print("");
     }
@@ -561,13 +579,13 @@ impl SavantElite {
 
         self.console.print("");
         self.console.print(
-            "[bold #9b59b6]┌─────────────────────────────────────────────────────────────────┐[/]",
+            "[bold #9b59b6]┌──────────────────────────────────────────────────────────┐[/]",
         );
         self.console.print(
-            "[bold #9b59b6]│[/]              [bold white]YOUR PEDAL CONFIGURATION[/]                        [bold #9b59b6]│[/]",
+            "[bold #9b59b6]│[/]           [bold white]YOUR PEDAL CONFIGURATION[/]                   [bold #9b59b6]│[/]",
         );
         self.console.print(
-            "[bold #9b59b6]└─────────────────────────────────────────────────────────────────┘[/]",
+            "[bold #9b59b6]└──────────────────────────────────────────────────────────┘[/]",
         );
         self.console.print("");
 
@@ -658,13 +676,13 @@ impl SavantElite {
 
         if found_any {
             self.console.print(
-                "[bold #3498db]┌─────────────────────────────────────────────────────────────────┐[/]",
+                "[bold #3498db]┌──────────────────────────────────────────────────────────┐[/]",
             );
             self.console.print(
-                "[bold #3498db]│[/]  [bold #f39c12]⚡[/] [bold white]DEVICE DETECTED[/]                                              [bold #3498db]│[/]",
+                "[bold #3498db]│[/]  [bold #f39c12]⚡[/] [bold white]DEVICE DETECTED[/]                                    [bold #3498db]│[/]",
             );
             self.console.print(
-                "[bold #3498db]└─────────────────────────────────────────────────────────────────┘[/]",
+                "[bold #3498db]└──────────────────────────────────────────────────────────┘[/]",
             );
             self.console.print("");
 
@@ -706,18 +724,42 @@ impl SavantElite {
             if let Some((_, _, _, path, serial, _, _, _)) = devices_info.first() {
                 self.console
                     .print(&format!("  [dim]Path:[/]   [#95a5a6]{}[/]", path));
+                if !serial.is_empty() && serial != "N/A" {
+                    self.console
+                        .print(&format!("  [dim]Serial:[/] [#95a5a6]{}[/]", serial));
+                }
+            }
+
+            // Show current pedal configuration from saved config
+            if let Some(config) = PedalConfig::load() {
+                self.print_pedal_visualization(&config.left, &config.middle, &config.right);
+            } else {
+                self.console.print("");
+                self.console.print(
+                    "[bold #f39c12]┌──────────────────────────────────────────────────────────┐[/]",
+                );
+                self.console.print(
+                    "[bold #f39c12]│[/]  [bold white]PEDAL CONFIGURATION UNKNOWN[/]                            [bold #f39c12]│[/]",
+                );
+                self.console.print(
+                    "[bold #f39c12]└──────────────────────────────────────────────────────────┘[/]",
+                );
+                self.console.print("");
                 self.console
-                    .print(&format!("  [dim]Serial:[/] [#95a5a6]{}[/]", serial));
+                    .print("  [#95a5a6]Run[/] [bold #3498db]savant program[/] [#95a5a6]to configure your pedals.[/]");
+                self.console.print("");
+                self.console
+                    .print("  [dim]Example:[/] [#95a5a6]savant program --left cmd+c --middle cmd+a --right cmd+v[/]");
             }
         } else {
             self.console.print(
-                "[bold #e74c3c]┌─────────────────────────────────────────────────────────────────┐[/]",
+                "[bold #e74c3c]┌──────────────────────────────────────────────────────────┐[/]",
             );
             self.console.print(
-                "[bold #e74c3c]│[/]  [bold #e74c3c]✗[/] [bold white]NO DEVICE FOUND[/]                                             [bold #e74c3c]│[/]",
+                "[bold #e74c3c]│[/]  [bold #e74c3c]✗[/] [bold white]NO DEVICE FOUND[/]                                   [bold #e74c3c]│[/]",
             );
             self.console.print(
-                "[bold #e74c3c]└─────────────────────────────────────────────────────────────────┘[/]",
+                "[bold #e74c3c]└──────────────────────────────────────────────────────────┘[/]",
             );
             self.console.print("");
             self.console
@@ -1871,6 +1913,19 @@ impl SavantElite {
             self.console.print(
                 "  [bold #2ecc71]╰────────────────────────────────────────────────────────────╯[/]",
             );
+
+            // Save config to disk for `savant info` to display later
+            let config = PedalConfig {
+                left: left.to_string(),
+                middle: middle.to_string(),
+                right: right.to_string(),
+            };
+            if let Err(e) = config.save() {
+                self.console.print(&format!(
+                    "  [dim]Note: Could not save config to disk: {}[/]",
+                    e
+                ));
+            }
         } else {
             self.console.print(
                 "  [bold #f39c12]╭────────────────────────────────────────────────────────────╮[/]",

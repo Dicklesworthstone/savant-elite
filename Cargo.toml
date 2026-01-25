@@ -17,6 +17,7 @@ libusb1-sys = { version = "0.7", features = ["vendored"] }
 anyhow = "1"
 hex = "0.4"
 rich_rust = "0.1"
+dirs = "5"
 
 [[bin]]
 name = "savant"
