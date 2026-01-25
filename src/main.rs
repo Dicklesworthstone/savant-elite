@@ -10,23 +10,23 @@ use std::process::Command;
 use std::time::Duration;
 
 const KINESIS_VID: u16 = 0x05F3;
-const SAVANT_ELITE_PID: u16 = 0x030C;      // Normal "play" mode PID
-const PROGRAMMING_PID: u16 = 0x0232;       // Programming mode PID (from driver INF)
+const SAVANT_ELITE_PID: u16 = 0x030C; // Normal "play" mode PID
+const PROGRAMMING_PID: u16 = 0x0232; // Programming mode PID (from driver INF)
 
 // PI Engineering X-keys protocol commands (used by Kinesis Savant Elite)
 mod xkeys_protocol {
     // Output report commands (sent to device)
-    pub const CMD_GENERATE_DATA: u8 = 0xB5;      // Request device state
-    pub const CMD_SET_LED: u8 = 0xB6;            // Set LED state
-    pub const CMD_SET_FLASH_FREQ: u8 = 0xB7;     // Set flash frequency
-    pub const CMD_SET_TIMESTAMP: u8 = 0xB8;      // Enable/disable timestamp
-    pub const CMD_GET_DESCRIPTOR: u8 = 0xC1;     // Request device descriptor
-    pub const CMD_SET_UNIT_ID: u8 = 0xC9;        // Set unit ID
-    pub const CMD_SET_PID: u8 = 0xCA;            // Change product ID (mode switch)
-    pub const CMD_REBOOT: u8 = 0xCB;             // Reboot device
-    pub const CMD_SET_KEY_MACRO: u8 = 0xCC;      // Program a key macro
-    pub const CMD_GET_KEY_MACRO: u8 = 0xCD;      // Get key macro
-    pub const CMD_SAVE_TO_EEPROM: u8 = 0xCE;     // Save to EEPROM
+    pub const CMD_GENERATE_DATA: u8 = 0xB5; // Request device state
+    pub const CMD_SET_LED: u8 = 0xB6; // Set LED state
+    pub const CMD_SET_FLASH_FREQ: u8 = 0xB7; // Set flash frequency
+    pub const CMD_SET_TIMESTAMP: u8 = 0xB8; // Enable/disable timestamp
+    pub const CMD_GET_DESCRIPTOR: u8 = 0xC1; // Request device descriptor
+    pub const CMD_SET_UNIT_ID: u8 = 0xC9; // Set unit ID
+    pub const CMD_SET_PID: u8 = 0xCA; // Change product ID (mode switch)
+    pub const CMD_REBOOT: u8 = 0xCB; // Reboot device
+    pub const CMD_SET_KEY_MACRO: u8 = 0xCC; // Program a key macro
+    pub const CMD_GET_KEY_MACRO: u8 = 0xCD; // Get key macro
+    pub const CMD_SAVE_TO_EEPROM: u8 = 0xCE; // Save to EEPROM
 
     // Macro data structure for programming (reconstructed from RE)
     // Based on HID scancode format: 0x07MMKK where MM=modifiers, KK=keycode
@@ -283,7 +283,9 @@ mod usb_hid {
 #[command(name = "savant")]
 #[command(version)]
 #[command(about = "Kinesis Savant Elite foot pedal programmer for macOS")]
-#[command(long_about = "Native macOS programmer for the discontinued Kinesis Savant Elite USB foot pedal.\n\nProgram your foot pedals directly via USB—no Windows VM, no 32-bit compatibility hacks.")]
+#[command(
+    long_about = "Native macOS programmer for the discontinued Kinesis Savant Elite USB foot pedal.\n\nProgram your foot pedals directly via USB—no Windows VM, no 32-bit compatibility hacks."
+)]
 struct Cli {
     #[command(subcommand)]
     command: Commands,
@@ -386,7 +388,11 @@ enum Commands {
     /// Generate a launchd plist for persistent remapping
     GeneratePlist {
         /// Output file path
-        #[arg(short, long, default_value = "~/Library/LaunchAgents/com.savant-elite.remap.plist")]
+        #[arg(
+            short,
+            long,
+            default_value = "~/Library/LaunchAgents/com.savant-elite.remap.plist"
+        )]
         output: String,
     },
 
@@ -567,7 +573,8 @@ impl SavantElite {
                         last_report.copy_from_slice(&buf[..8]);
 
                         let modifiers = buf[0];
-                        let keys: Vec<u8> = buf[2..8].iter().filter(|&&k| k != 0).copied().collect();
+                        let keys: Vec<u8> =
+                            buf[2..8].iter().filter(|&&k| k != 0).copied().collect();
 
                         if modifiers != 0 || !keys.is_empty() {
                             print!("Pressed: ");
@@ -932,7 +939,9 @@ fn print_detect_instructions() {
     println!("  - f13, f14, f15 (Function keys)");
     println!("  - a, b, c, etc. (Letter keys)\n");
     println!("Once you know what each pedal sends, run:");
-    println!("  savant karabiner --left-src <key> --middle-src <key> --right-src <key> --install\n");
+    println!(
+        "  savant karabiner --left-src <key> --middle-src <key> --right-src <key> --install\n"
+    );
     println!("Example (if pedals send left/right arrows and mouse click):");
     println!("  savant karabiner --left-src left_arrow --middle-src right_arrow --right-src mouse_click --install");
 }
@@ -975,7 +984,11 @@ fn main() -> Result<()> {
             savant.monitor(duration)?;
         }
 
-        Commands::Setup { left, middle, right } => {
+        Commands::Setup {
+            left,
+            middle,
+            right,
+        } => {
             print_setup_instructions(&left, &middle, &right);
         }
 
@@ -1017,7 +1030,10 @@ fn main() -> Result<()> {
             }
         }
 
-        Commands::Apply { install, swap_left_middle } => {
+        Commands::Apply {
+            install,
+            swap_left_middle,
+        } => {
             println!("=== Quick Apply: Common Factory Defaults ===\n");
             println!("Assuming your pedals send:");
             println!("  Left pedal:   Left Arrow");
@@ -1065,7 +1081,12 @@ fn main() -> Result<()> {
             }
         }
 
-        Commands::Remap { left, middle, right, clear } => {
+        Commands::Remap {
+            left,
+            middle,
+            right,
+            clear,
+        } => {
             if clear {
                 clear_hidutil_mappings()?;
             }
@@ -1075,18 +1096,24 @@ fn main() -> Result<()> {
 
             if let Some(ref action) = left {
                 let key = KeyAction::from_string(action)?;
-                println!("Left pedal -> {} (key code: 0x{:02X}, modifiers: 0x{:02X})",
-                         action, key.key, key.modifiers);
+                println!(
+                    "Left pedal -> {} (key code: 0x{:02X}, modifiers: 0x{:02X})",
+                    action, key.key, key.modifiers
+                );
             }
             if let Some(ref action) = middle {
                 let key = KeyAction::from_string(action)?;
-                println!("Middle pedal -> {} (key code: 0x{:02X}, modifiers: 0x{:02X})",
-                         action, key.key, key.modifiers);
+                println!(
+                    "Middle pedal -> {} (key code: 0x{:02X}, modifiers: 0x{:02X})",
+                    action, key.key, key.modifiers
+                );
             }
             if let Some(ref action) = right {
                 let key = KeyAction::from_string(action)?;
-                println!("Right pedal -> {} (key code: 0x{:02X}, modifiers: 0x{:02X})",
-                         action, key.key, key.modifiers);
+                println!(
+                    "Right pedal -> {} (key code: 0x{:02X}, modifiers: 0x{:02X})",
+                    action, key.key, key.modifiers
+                );
             }
         }
 
@@ -1142,12 +1169,18 @@ fn main() -> Result<()> {
             for device_info in api.device_list() {
                 if device_info.vendor_id() == KINESIS_VID {
                     let pid = device_info.product_id();
-                    println!("\nFound device: VID={:04X} PID={:04X}",
-                             device_info.vendor_id(), pid);
+                    println!(
+                        "\nFound device: VID={:04X} PID={:04X}",
+                        device_info.vendor_id(),
+                        pid
+                    );
                     println!("  Path: {}", device_info.path().to_string_lossy());
                     println!("  Interface: {}", device_info.interface_number());
-                    println!("  Usage Page: 0x{:04X}, Usage: 0x{:04X}",
-                             device_info.usage_page(), device_info.usage());
+                    println!(
+                        "  Usage Page: 0x{:04X}, Usage: 0x{:04X}",
+                        device_info.usage_page(),
+                        device_info.usage()
+                    );
 
                     if pid == programming_pid {
                         println!("  ** PROGRAMMING MODE DETECTED **");
@@ -1179,7 +1212,10 @@ fn main() -> Result<()> {
                                         let mut response = [0u8; 64];
                                         match device.read_timeout(&mut response, 200) {
                                             Ok(len) if len > 0 => {
-                                                println!("    Response: {}", hex::encode(&response[..len]));
+                                                println!(
+                                                    "    Response: {}",
+                                                    hex::encode(&response[..len])
+                                                );
                                             }
                                             _ => println!("    No response"),
                                         }
@@ -1195,7 +1231,11 @@ fn main() -> Result<()> {
                                 buf[0] = report_id;
                                 match device.get_feature_report(&mut buf) {
                                     Ok(len) if len > 0 => {
-                                        println!("    Feature report {}: {}", report_id, hex::encode(&buf[..len]));
+                                        println!(
+                                            "    Feature report {}: {}",
+                                            report_id,
+                                            hex::encode(&buf[..len])
+                                        );
                                     }
                                     _ => {}
                                 }
@@ -1222,7 +1262,11 @@ fn main() -> Result<()> {
             println!("\nAlternatively: Hold a pedal while connecting the USB cable");
         }
 
-        Commands::RawCmd { cmd, data, interface } => {
+        Commands::RawCmd {
+            cmd,
+            data,
+            interface,
+        } => {
             println!("Sending raw command...\n");
 
             let cmd_byte = u8::from_str_radix(&cmd, 16)
@@ -1239,9 +1283,9 @@ fn main() -> Result<()> {
             // Find the right interface
             for device_info in api.device_list() {
                 if device_info.vendor_id() == KINESIS_VID
-                   && device_info.product_id() == SAVANT_ELITE_PID
-                   && device_info.interface_number() == interface {
-
+                    && device_info.product_id() == SAVANT_ELITE_PID
+                    && device_info.interface_number() == interface
+                {
                     match device_info.open_device(&api) {
                         Ok(device) => {
                             let mut cmd_buf = [0u8; 36];
@@ -1264,7 +1308,11 @@ fn main() -> Result<()> {
                                     let mut response = [0u8; 64];
                                     match device.read_timeout(&mut response, 500) {
                                         Ok(len) if len > 0 => {
-                                            println!("Response ({} bytes): {}", len, hex::encode(&response[..len]));
+                                            println!(
+                                                "Response ({} bytes): {}",
+                                                len,
+                                                hex::encode(&response[..len])
+                                            );
                                         }
                                         Ok(_) => println!("No response"),
                                         Err(e) => println!("Read error: {}", e),
@@ -1293,22 +1341,45 @@ fn main() -> Result<()> {
                     match desc.product_id() {
                         SAVANT_ELITE_PID => {
                             found_play_usb = true;
-                            println!("Found device in PLAY mode (PID 0x{:04X}) [via libusb]", SAVANT_ELITE_PID);
-                            println!("  Bus {:03} Device {:03}", device.bus_number(), device.address());
+                            println!(
+                                "Found device in PLAY mode (PID 0x{:04X}) [via libusb]",
+                                SAVANT_ELITE_PID
+                            );
+                            println!(
+                                "  Bus {:03} Device {:03}",
+                                device.bus_number(),
+                                device.address()
+                            );
                         }
                         PROGRAMMING_PID => {
                             found_program_usb = true;
-                            println!("Found device in PROGRAMMING mode (PID 0x{:04X}) [via libusb]", PROGRAMMING_PID);
-                            println!("  Bus {:03} Device {:03}", device.bus_number(), device.address());
+                            println!(
+                                "Found device in PROGRAMMING mode (PID 0x{:04X}) [via libusb]",
+                                PROGRAMMING_PID
+                            );
+                            println!(
+                                "  Bus {:03} Device {:03}",
+                                device.bus_number(),
+                                device.address()
+                            );
 
                             // Try to get more info
                             if let Ok(handle) = device.open() {
-                                if let Ok(langs) = handle.read_languages(Duration::from_millis(100)) {
+                                if let Ok(langs) = handle.read_languages(Duration::from_millis(100))
+                                {
                                     if let Some(lang) = langs.first() {
-                                        if let Ok(prod) = handle.read_product_string(*lang, &desc, Duration::from_millis(100)) {
+                                        if let Ok(prod) = handle.read_product_string(
+                                            *lang,
+                                            &desc,
+                                            Duration::from_millis(100),
+                                        ) {
                                             println!("  Product: {}", prod);
                                         }
-                                        if let Ok(mfr) = handle.read_manufacturer_string(*lang, &desc, Duration::from_millis(100)) {
+                                        if let Ok(mfr) = handle.read_manufacturer_string(
+                                            *lang,
+                                            &desc,
+                                            Duration::from_millis(100),
+                                        ) {
                                             println!("  Manufacturer: {}", mfr);
                                         }
                                     }
@@ -1331,12 +1402,17 @@ fn main() -> Result<()> {
                     if device_info.product_id() == SAVANT_ELITE_PID {
                         if !found_play_usb && !found_play_hid {
                             found_play_hid = true;
-                            println!("Found device in PLAY mode (PID 0x{:04X}) [via HID]", SAVANT_ELITE_PID);
+                            println!(
+                                "Found device in PLAY mode (PID 0x{:04X}) [via HID]",
+                                SAVANT_ELITE_PID
+                            );
                         }
-                        println!("  Interface {}: Usage Page 0x{:04X}, Usage 0x{:04X}",
-                                 device_info.interface_number(),
-                                 device_info.usage_page(),
-                                 device_info.usage());
+                        println!(
+                            "  Interface {}: Usage Page 0x{:04X}, Usage 0x{:04X}",
+                            device_info.interface_number(),
+                            device_info.usage_page(),
+                            device_info.usage()
+                        );
                     }
                 }
             }
@@ -1364,7 +1440,12 @@ fn main() -> Result<()> {
             }
         }
 
-        Commands::Program { left, middle, right, dry_run } => {
+        Commands::Program {
+            left,
+            middle,
+            right,
+            dry_run,
+        } => {
             println!("=== Programming Savant Elite Pedals ===\n");
 
             // Check if device is in programming mode using libusb
@@ -1410,22 +1491,34 @@ fn main() -> Result<()> {
             let right_action = KeyAction::from_string(&right)?;
 
             println!("Configuration to program:");
-            println!("  Left pedal:   {} (mod=0x{:02X}, key=0x{:02X})",
-                     left, left_action.modifiers, left_action.key);
-            println!("  Middle pedal: {} (mod=0x{:02X}, key=0x{:02X})",
-                     middle, middle_action.modifiers, middle_action.key);
-            println!("  Right pedal:  {} (mod=0x{:02X}, key=0x{:02X})",
-                     right, right_action.modifiers, right_action.key);
+            println!(
+                "  Left pedal:   {} (mod=0x{:02X}, key=0x{:02X})",
+                left, left_action.modifiers, left_action.key
+            );
+            println!(
+                "  Middle pedal: {} (mod=0x{:02X}, key=0x{:02X})",
+                middle, middle_action.modifiers, middle_action.key
+            );
+            println!(
+                "  Right pedal:  {} (mod=0x{:02X}, key=0x{:02X})",
+                right, right_action.modifiers, right_action.key
+            );
             println!();
 
             if dry_run {
                 println!("DRY RUN: Would send the following commands:");
-                println!("  Set Key Macro (0xCC) for pedal 0: mod=0x{:02X}, key=0x{:02X}",
-                         left_action.modifiers, left_action.key);
-                println!("  Set Key Macro (0xCC) for pedal 1: mod=0x{:02X}, key=0x{:02X}",
-                         middle_action.modifiers, middle_action.key);
-                println!("  Set Key Macro (0xCC) for pedal 2: mod=0x{:02X}, key=0x{:02X}",
-                         right_action.modifiers, right_action.key);
+                println!(
+                    "  Set Key Macro (0xCC) for pedal 0: mod=0x{:02X}, key=0x{:02X}",
+                    left_action.modifiers, left_action.key
+                );
+                println!(
+                    "  Set Key Macro (0xCC) for pedal 1: mod=0x{:02X}, key=0x{:02X}",
+                    middle_action.modifiers, middle_action.key
+                );
+                println!(
+                    "  Set Key Macro (0xCC) for pedal 2: mod=0x{:02X}, key=0x{:02X}",
+                    right_action.modifiers, right_action.key
+                );
                 println!("  Save to EEPROM (0xCE)");
                 return Ok(());
             }
@@ -1440,11 +1533,15 @@ fn main() -> Result<()> {
             // Try to claim interface 0
             let interface_num = 0;
             if handle.kernel_driver_active(interface_num).unwrap_or(false) {
-                println!("Detaching kernel driver from interface {}...", interface_num);
+                println!(
+                    "Detaching kernel driver from interface {}...",
+                    interface_num
+                );
                 handle.detach_kernel_driver(interface_num)?;
             }
 
-            handle.claim_interface(interface_num)
+            handle
+                .claim_interface(interface_num)
                 .context("Failed to claim interface - do you have permission?")?;
 
             println!("Claimed interface {}", interface_num);
@@ -1455,11 +1552,13 @@ fn main() -> Result<()> {
 
             for interface in config.interfaces() {
                 for desc in interface.descriptors() {
-                    println!("Interface {}: class={} subclass={} protocol={}",
-                             desc.interface_number(),
-                             desc.class_code(),
-                             desc.sub_class_code(),
-                             desc.protocol_code());
+                    println!(
+                        "Interface {}: class={} subclass={} protocol={}",
+                        desc.interface_number(),
+                        desc.class_code(),
+                        desc.sub_class_code(),
+                        desc.protocol_code()
+                    );
                     for ep in desc.endpoint_descriptors() {
                         let dir = match ep.direction() {
                             rusb::Direction::Out => {
@@ -1477,8 +1576,13 @@ fn main() -> Result<()> {
                             rusb::TransferType::Bulk => "Bulk",
                             rusb::TransferType::Interrupt => "Interrupt",
                         };
-                        println!("  Endpoint 0x{:02X}: {} {} (max packet: {})",
-                                 ep.address(), dir, transfer, ep.max_packet_size());
+                        println!(
+                            "  Endpoint 0x{:02X}: {} {} (max packet: {})",
+                            ep.address(),
+                            dir,
+                            transfer,
+                            ep.max_packet_size()
+                        );
                     }
                 }
             }
@@ -1497,20 +1601,52 @@ fn main() -> Result<()> {
                 let mut success = false;
 
                 // Format 1: Command as first byte, pedal, mods, key
-                let cmd1 = [xkeys_protocol::CMD_SET_KEY_MACRO, pedal_idx, action.modifiers, action.key, 0, 0, 0, 0];
+                let cmd1 = [
+                    xkeys_protocol::CMD_SET_KEY_MACRO,
+                    pedal_idx,
+                    action.modifiers,
+                    action.key,
+                    0,
+                    0,
+                    0,
+                    0,
+                ];
 
                 // Format 2: Report ID 0, then command
-                let cmd2 = [0u8, xkeys_protocol::CMD_SET_KEY_MACRO, pedal_idx, action.modifiers, action.key, 0, 0, 0];
+                let cmd2 = [
+                    0u8,
+                    xkeys_protocol::CMD_SET_KEY_MACRO,
+                    pedal_idx,
+                    action.modifiers,
+                    action.key,
+                    0,
+                    0,
+                    0,
+                ];
 
                 // Format 3: Report ID = command
-                let cmd3 = [xkeys_protocol::CMD_SET_KEY_MACRO, pedal_idx, action.modifiers, action.key, 0, 0, 0, 0];
+                let cmd3 = [
+                    xkeys_protocol::CMD_SET_KEY_MACRO,
+                    pedal_idx,
+                    action.modifiers,
+                    action.key,
+                    0,
+                    0,
+                    0,
+                    0,
+                ];
 
                 // Try SET_REPORT with command as report ID (Feature report)
-                for (fmt_name, data) in [("fmt1-feat", &cmd1[..]), ("fmt2-feat", &cmd2[..]), ("fmt3-feat", &cmd3[..])] {
+                for (fmt_name, data) in [
+                    ("fmt1-feat", &cmd1[..]),
+                    ("fmt2-feat", &cmd2[..]),
+                    ("fmt3-feat", &cmd3[..]),
+                ] {
                     let report_id = data[0] as u16;
                     let result = handle.write_control(
-                        0x21, 0x09,
-                        0x0300 | report_id,  // Feature report
+                        0x21,
+                        0x09,
+                        0x0300 | report_id, // Feature report
                         interface_num as u16,
                         data,
                         Duration::from_millis(500),
@@ -1524,11 +1660,16 @@ fn main() -> Result<()> {
 
                 // Try SET_REPORT with Output report type
                 if !success {
-                    for (fmt_name, data) in [("fmt1-out", &cmd1[..]), ("fmt2-out", &cmd2[..]), ("fmt3-out", &cmd3[..])] {
+                    for (fmt_name, data) in [
+                        ("fmt1-out", &cmd1[..]),
+                        ("fmt2-out", &cmd2[..]),
+                        ("fmt3-out", &cmd3[..]),
+                    ] {
                         let report_id = data[0] as u16;
                         let result = handle.write_control(
-                            0x21, 0x09,
-                            0x0200 | report_id,  // Output report
+                            0x21,
+                            0x09,
+                            0x0200 | report_id, // Output report
                             interface_num as u16,
                             data,
                             Duration::from_millis(500),
@@ -1551,8 +1692,12 @@ fn main() -> Result<()> {
                     long_buf[4] = action.key;
 
                     let result = handle.write_control(
-                        0x21, 0x09, 0x0200, interface_num as u16,
-                        &long_buf, Duration::from_millis(500),
+                        0x21,
+                        0x09,
+                        0x0200,
+                        interface_num as u16,
+                        &long_buf,
+                        Duration::from_millis(500),
                     );
                     if result.is_ok() {
                         success = true;
@@ -1563,10 +1708,10 @@ fn main() -> Result<()> {
                 // Try vendor-specific request
                 if !success {
                     let result = handle.write_control(
-                        0x40,  // Vendor, Device
-                        xkeys_protocol::CMD_SET_KEY_MACRO,  // bRequest = command
-                        ((action.key as u16) << 8) | (action.modifiers as u16),  // wValue
-                        pedal_idx as u16,  // wIndex
+                        0x40,                                                   // Vendor, Device
+                        xkeys_protocol::CMD_SET_KEY_MACRO, // bRequest = command
+                        ((action.key as u16) << 8) | (action.modifiers as u16), // wValue
+                        pedal_idx as u16,                  // wIndex
                         &[],
                         Duration::from_millis(500),
                     );
@@ -1588,8 +1733,9 @@ fn main() -> Result<()> {
             let save_cmd = [xkeys_protocol::CMD_SAVE_TO_EEPROM, 0, 0, 0, 0, 0, 0, 0];
 
             let save_result = handle.write_control(
-                0x21, 0x09,
-                0x0200 | (xkeys_protocol::CMD_SAVE_TO_EEPROM as u16),  // Output report
+                0x21,
+                0x09,
+                0x0200 | (xkeys_protocol::CMD_SAVE_TO_EEPROM as u16), // Output report
                 interface_num as u16,
                 &save_cmd,
                 Duration::from_millis(1000),
@@ -1603,10 +1749,31 @@ fn main() -> Result<()> {
                 let mut save_success = false;
                 let save_alt = [0u8, xkeys_protocol::CMD_SAVE_TO_EEPROM, 0, 0, 0, 0, 0, 0];
 
-                if handle.write_control(0x21, 0x09, 0x0200, interface_num as u16, &save_alt, Duration::from_millis(500)).is_ok() {
+                if handle
+                    .write_control(
+                        0x21,
+                        0x09,
+                        0x0200,
+                        interface_num as u16,
+                        &save_alt,
+                        Duration::from_millis(500),
+                    )
+                    .is_ok()
+                {
                     save_success = true;
                 }
-                if !save_success && handle.write_control(0x21, 0x09, 0x0300 | (xkeys_protocol::CMD_SAVE_TO_EEPROM as u16), interface_num as u16, &save_cmd, Duration::from_millis(500)).is_ok() {
+                if !save_success
+                    && handle
+                        .write_control(
+                            0x21,
+                            0x09,
+                            0x0300 | (xkeys_protocol::CMD_SAVE_TO_EEPROM as u16),
+                            interface_num as u16,
+                            &save_cmd,
+                            Duration::from_millis(500),
+                        )
+                        .is_ok()
+                {
                     save_success = true;
                 }
 

@@ -2,40 +2,33 @@
 
 <div align="center">
 
-```
-    ╔═══════════════════════════════════════════════════════════╗
-    ║                                                           ║
-    ║     ┌─────┐     ┌─────┐     ┌─────┐                      ║
-    ║     │ L   │     │ M   │     │ R   │   ← Your Pedals      ║
-    ║     │Cmd+C│     │Cmd+A│     │Cmd+V│   ← Your Actions     ║
-    ║     └──┬──┘     └──┬──┘     └──┬──┘                      ║
-    ║        │           │           │                          ║
-    ║        └───────────┴───────────┘                          ║
-    ║                    │                                      ║
-    ║              ┌─────┴─────┐                                ║
-    ║              │  savant   │  ← This Tool                   ║
-    ║              │   elite   │                                ║
-    ║              └───────────┘                                ║
-    ║                                                           ║
-    ╚═══════════════════════════════════════════════════════════╝
-```
+<img src="https://raw.githubusercontent.com/Dicklesworthstone/savant-elite/main/savant_elite_illustration.webp" alt="Savant Elite Foot Pedal Illustration" width="600">
 
+[![CI](https://github.com/Dicklesworthstone/savant-elite/actions/workflows/ci.yml/badge.svg)](https://github.com/Dicklesworthstone/savant-elite/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Rust](https://img.shields.io/badge/Rust-1.70+-orange.svg)](https://www.rust-lang.org/)
 [![macOS](https://img.shields.io/badge/macOS-12+-blue.svg)](https://www.apple.com/macos/)
-
-</div>
 
 **Native macOS programmer for the discontinued Kinesis Savant Elite USB foot pedal.**
 
 Program your foot pedals directly via USB—no Windows VM, no 32-bit compatibility hacks, no Karabiner workarounds. Just `savant program` and you're done.
 
-<div align="center">
-
 ### Quick Install
 
+**macOS (Apple Silicon)**
 ```bash
-cargo install --git https://github.com/jemanuel/savant_elite_rust.git
+curl -fsSL https://github.com/Dicklesworthstone/savant-elite/releases/latest/download/savant-darwin-arm64.tar.xz | tar -xJ && sudo mv savant /usr/local/bin/
+```
+
+**macOS (Intel)**
+```bash
+curl -fsSL https://github.com/Dicklesworthstone/savant-elite/releases/latest/download/savant-darwin-amd64.tar.xz | tar -xJ && sudo mv savant /usr/local/bin/
+```
+
+**Verify Checksum (optional)**
+```bash
+curl -fsSL https://github.com/Dicklesworthstone/savant-elite/releases/latest/download/SHA256SUMS
+shasum -a 256 -c SHA256SUMS
 ```
 
 </div>
@@ -114,31 +107,54 @@ This tool sends X-keys protocol commands to program the EEPROM when in Program m
 
 ## Installation
 
-### From Source (Recommended)
+### Pre-built Binary (Recommended)
+
+**macOS (Apple Silicon)**
+```bash
+curl -fsSL https://github.com/Dicklesworthstone/savant-elite/releases/latest/download/savant-darwin-arm64.tar.xz | tar -xJ
+sudo mv savant /usr/local/bin/
+```
+
+**macOS (Intel)**
+```bash
+curl -fsSL https://github.com/Dicklesworthstone/savant-elite/releases/latest/download/savant-darwin-amd64.tar.xz | tar -xJ
+sudo mv savant /usr/local/bin/
+```
+
+**Verify Checksum**
+```bash
+# Download checksum file
+curl -fsSL https://github.com/Dicklesworthstone/savant-elite/releases/latest/download/SHA256SUMS -o SHA256SUMS
+
+# Download binary
+curl -fsSL https://github.com/Dicklesworthstone/savant-elite/releases/latest/download/savant-darwin-arm64.tar.xz -o savant-darwin-arm64.tar.xz
+
+# Verify
+shasum -a 256 -c SHA256SUMS --ignore-missing
+```
+
+### From Source
 
 ```bash
 # Clone and build
-git clone https://github.com/jemanuel/savant_elite_rust.git
-cd savant_elite_rust
+git clone https://github.com/Dicklesworthstone/savant-elite.git
+cd savant-elite
 cargo build --release
 
 # Install to PATH
-cp target/release/savant ~/.local/bin/
-# or
 sudo cp target/release/savant /usr/local/bin/
 ```
 
 ### Via Cargo
 
 ```bash
-cargo install --git https://github.com/jemanuel/savant_elite_rust.git
+cargo install --git https://github.com/Dicklesworthstone/savant-elite.git
 ```
 
 ### Requirements
 
 - **macOS 12+** (tested on macOS 15 Sequoia)
-- **Rust 1.70+** (for building)
-- **libusb** (installed automatically via rusb)
+- **Rust 1.70+** (for building from source)
 - **Kinesis Savant Elite** foot pedal (VID `0x05F3`)
 
 ---
