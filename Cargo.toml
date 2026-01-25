@@ -1,0 +1,19 @@
+[package]
+name = "savant-elite"
+version = "0.1.0"
+edition = "2021"
+description = "Kinesis Savant Elite foot pedal programmer for macOS"
+license = "MIT"
+
+[dependencies]
+clap = { version = "4", features = ["derive"] }
+hidapi = "2"
+rusb = "0.9"
+anyhow = "1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+hex = "0.4"
+
+[[bin]]
+name = "savant"
+path = "src/main.rs"
