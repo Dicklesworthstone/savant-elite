@@ -1680,15 +1680,6 @@ impl SavantElite {
         self.console.print_renderable(&config_table);
         self.console.print("");
 
-        // Pre-programming warning about keeping device connected
-        self.console.print(
-            "  [bold #f39c12]⚠[/]  [#f39c12]Keep the device connected during programming.[/]",
-        );
-        self.console.print(
-            "     [dim]Unplugging mid-operation may leave pedals in a partial state (in RAM, not saved).[/]",
-        );
-        self.console.print("");
-
         if dry_run {
             // Show visual pedal configuration preview
             self.print_pedal_visualization(left, middle, right);
@@ -1722,6 +1713,15 @@ impl SavantElite {
             self.console.print("");
             return Ok(());
         }
+
+        // Pre-programming warning about keeping device connected
+        self.console.print(
+            "  [bold #f39c12]⚠[/]  [#f39c12]Keep the device connected during programming.[/]",
+        );
+        self.console.print(
+            "     [dim]Unplugging mid-operation may leave pedals in a partial state (in RAM, not saved).[/]",
+        );
+        self.console.print("");
 
         // Open device
         let handle = device
@@ -2019,11 +2019,10 @@ impl SavantElite {
                     "  [bold #f39c12]WARNING:[/] The device was unplugged during programming.",
                 );
                 self.console.print(
-                    "  [#95a5a6]Pedals programmed so far are stored in RAM only (not EEPROM).[/]",
+                    "  [#95a5a6]Pedals programmed so far were stored in RAM only (not saved to EEPROM).[/]",
                 );
-                self.console.print(
-                    "  [#95a5a6]These changes will be lost when the device is unplugged.[/]",
-                );
+                self.console
+                    .print("  [#95a5a6]Those changes were lost when the device was unplugged.[/]");
                 self.console.print("");
                 self.console
                     .print("  [bold #f39c12]To complete programming:[/]");
