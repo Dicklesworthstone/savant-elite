@@ -306,8 +306,9 @@ main() {
         echo -e "  ${CYAN}savant monitor${NC}"
         echo ""
         echo -e "${BOLD}Programming Mode:${NC}"
-        echo -e "  Hold the ${YELLOW}middle pedal${NC} while plugging in USB to enter programming mode."
-        echo -e "  The LED will blink rapidly when in programming mode."
+        echo -e "  1. Flip the pedal over and find the recessed switch near the Kinesis sticker"
+        echo -e "  2. Use a paperclip to flip the switch from ${GREEN}Play${NC} → ${RED}Program${NC}"
+        echo -e "  3. Unplug and replug USB, then run ${CYAN}savant status${NC} to verify"
         echo ""
 
         if [[ ":$PATH:" != *":${install_dir}:"* ]]; then
