@@ -230,6 +230,49 @@ fn cli_rejects_multiple_plus_only() {
         .failure();
 }
 
+#[test]
+fn cli_rejects_whitespace_between_plus() {
+    // "cmd + + c" has a whitespace-only component between the plus signs
+    savant()
+        .args(["program", "--left", "cmd + + c", "--dry-run"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("empty component"));
+}
+
+#[test]
+fn cli_accepts_multiple_modifiers() {
+    // Multiple modifiers should work
+    savant()
+        .args(["program", "--left", "ctrl+shift+alt+cmd+a", "--dry-run"])
+        .assert()
+        .success();
+}
+
+#[test]
+fn cli_accepts_modifier_aliases() {
+    // Various modifier aliases should all work
+    savant()
+        .args(["program", "--left", "command+a", "--dry-run"])
+        .assert()
+        .success();
+
+    savant()
+        .args(["program", "--left", "control+a", "--dry-run"])
+        .assert()
+        .success();
+
+    savant()
+        .args(["program", "--left", "option+a", "--dry-run"])
+        .assert()
+        .success();
+
+    savant()
+        .args(["program", "--left", "gui+a", "--dry-run"])
+        .assert()
+        .success();
+}
+
 // ============================================================================
 // Raw Command Tests
 // ============================================================================
