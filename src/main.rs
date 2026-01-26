@@ -135,6 +135,20 @@ mod xkeys_protocol {
     pub const PEDAL_RIGHT: u8 = 2;
 }
 
+mod usb_constants {
+    pub const HID_REQUEST_TYPE_CLASS_INTERFACE_OUT: u8 = 0x21;
+    pub const HID_REQUEST_TYPE_CLASS_INTERFACE_IN: u8 = 0xA1;
+
+    pub const HID_SET_REPORT: u8 = 0x09;
+    pub const HID_GET_REPORT: u8 = 0x01;
+
+    pub const HID_REPORT_TYPE_INPUT: u16 = 0x0100;
+    pub const HID_REPORT_TYPE_OUTPUT: u16 = 0x0200;
+    pub const HID_REPORT_TYPE_FEATURE: u16 = 0x0300;
+
+    pub const USB_REQUEST_TYPE_VENDOR_OUT: u8 = 0x40;
+}
+
 // USB HID keyboard usage codes
 // See: https://usb.org/sites/default/files/hut1_4.pdf (Section 10)
 // These constants document the full HID spec even if not all are currently used.
@@ -588,8 +602,6 @@ fn is_device_still_connected(bus_number: u8, device_address: u8) -> bool {
 
 impl SavantElite {
     fn new() -> Result<Self> {
-        // Verify HID API can be initialized
-        let _ = HidApi::new().context("Failed to initialize HID API")?;
         Ok(Self {
             console: Console::new(),
         })
@@ -1392,18 +1404,18 @@ impl SavantElite {
         // The report ID may be 0, the command byte, or include pedal index
         for w_value in [
             // Feature report with CMD as report ID
-            0x0300 | (xkeys_protocol::CMD_GET_KEY_MACRO as u16),
+            usb_constants::HID_REPORT_TYPE_FEATURE | (xkeys_protocol::CMD_GET_KEY_MACRO as u16),
             // Feature report with report ID 0
-            0x0300,
+            usb_constants::HID_REPORT_TYPE_FEATURE,
             // Input report with CMD as report ID
-            0x0100 | (xkeys_protocol::CMD_GET_KEY_MACRO as u16),
+            usb_constants::HID_REPORT_TYPE_INPUT | (xkeys_protocol::CMD_GET_KEY_MACRO as u16),
             // Input report with report ID 0
-            0x0100,
+            usb_constants::HID_REPORT_TYPE_INPUT,
         ] {
             // GET_REPORT request: bmRequestType=0xA1 (device-to-host, class, interface)
             let result = handle.read_control(
-                0xA1,
-                0x01, // GET_REPORT
+                usb_constants::HID_REQUEST_TYPE_CLASS_INTERFACE_IN,
+                usb_constants::HID_GET_REPORT,
                 w_value,
                 interface_num as u16,
                 &mut response,
@@ -1872,34 +1884,54 @@ impl SavantElite {
             // - report_id = 0 with a leading 0 report-id byte (hidapi-style),
             // - report_id = CMD with either data starting at CMD or with a compact payload.
             for (fmt_name, w_value, data) in [
-                ("feat-rid0-cmd", 0x0300, &cmd1[..]),
-                ("feat-rid0-prefix", 0x0300, &cmd2[..]),
+                (
+                    "feat-rid0-cmd",
+                    usb_constants::HID_REPORT_TYPE_FEATURE,
+                    &cmd1[..],
+                ),
+                (
+                    "feat-rid0-prefix",
+                    usb_constants::HID_REPORT_TYPE_FEATURE,
+                    &cmd2[..],
+                ),
                 (
                     "feat-ridcmd",
-                    0x0300 | (xkeys_protocol::CMD_SET_KEY_MACRO as u16),
+                    usb_constants::HID_REPORT_TYPE_FEATURE
+                        | (xkeys_protocol::CMD_SET_KEY_MACRO as u16),
                     &cmd1[..],
                 ),
                 (
                     "feat-ridcmd-payload",
-                    0x0300 | (xkeys_protocol::CMD_SET_KEY_MACRO as u16),
+                    usb_constants::HID_REPORT_TYPE_FEATURE
+                        | (xkeys_protocol::CMD_SET_KEY_MACRO as u16),
                     &cmd3_payload[..],
                 ),
-                ("out-rid0-cmd", 0x0200, &cmd1[..]),
-                ("out-rid0-prefix", 0x0200, &cmd2[..]),
+                (
+                    "out-rid0-cmd",
+                    usb_constants::HID_REPORT_TYPE_OUTPUT,
+                    &cmd1[..],
+                ),
+                (
+                    "out-rid0-prefix",
+                    usb_constants::HID_REPORT_TYPE_OUTPUT,
+                    &cmd2[..],
+                ),
                 (
                     "out-ridcmd",
-                    0x0200 | (xkeys_protocol::CMD_SET_KEY_MACRO as u16),
+                    usb_constants::HID_REPORT_TYPE_OUTPUT
+                        | (xkeys_protocol::CMD_SET_KEY_MACRO as u16),
                     &cmd1[..],
                 ),
                 (
                     "out-ridcmd-payload",
-                    0x0200 | (xkeys_protocol::CMD_SET_KEY_MACRO as u16),
+                    usb_constants::HID_REPORT_TYPE_OUTPUT
+                        | (xkeys_protocol::CMD_SET_KEY_MACRO as u16),
                     &cmd3_payload[..],
                 ),
             ] {
                 let result = handle.write_control(
-                    0x21,
-                    0x09,
+                    usb_constants::HID_REQUEST_TYPE_CLASS_INTERFACE_OUT,
+                    usb_constants::HID_SET_REPORT,
                     w_value,
                     interface_num as u16,
                     data,
@@ -1928,14 +1960,30 @@ impl SavantElite {
                 long_unprefixed[3] = action.key;
 
                 for (fmt_name, w_value, data) in [
-                    ("36b-out-prefix", 0x0200, &long_prefixed[..]),
-                    ("36b-out-cmd", 0x0200, &long_unprefixed[..]),
-                    ("36b-feat-prefix", 0x0300, &long_prefixed[..]),
-                    ("36b-feat-cmd", 0x0300, &long_unprefixed[..]),
+                    (
+                        "36b-out-prefix",
+                        usb_constants::HID_REPORT_TYPE_OUTPUT,
+                        &long_prefixed[..],
+                    ),
+                    (
+                        "36b-out-cmd",
+                        usb_constants::HID_REPORT_TYPE_OUTPUT,
+                        &long_unprefixed[..],
+                    ),
+                    (
+                        "36b-feat-prefix",
+                        usb_constants::HID_REPORT_TYPE_FEATURE,
+                        &long_prefixed[..],
+                    ),
+                    (
+                        "36b-feat-cmd",
+                        usb_constants::HID_REPORT_TYPE_FEATURE,
+                        &long_unprefixed[..],
+                    ),
                 ] {
                     let result = handle.write_control(
-                        0x21,
-                        0x09,
+                        usb_constants::HID_REQUEST_TYPE_CLASS_INTERFACE_OUT,
+                        usb_constants::HID_SET_REPORT,
                         w_value,
                         interface_num as u16,
                         data,
@@ -1952,7 +2000,7 @@ impl SavantElite {
             // Try vendor-specific request
             if !success {
                 let result = handle.write_control(
-                    0x40,
+                    usb_constants::USB_REQUEST_TYPE_VENDOR_OUT,
                     xkeys_protocol::CMD_SET_KEY_MACRO,
                     ((action.key as u16) << 8) | (action.modifiers as u16),
                     pedal_idx as u16,
@@ -2061,38 +2109,60 @@ impl SavantElite {
         let mut save_success = false;
 
         for (_fmt_name, w_value, data, timeout_ms) in [
-            ("out-rid0-cmd", 0x0200, &save_cmd[..], 1000),
-            ("out-rid0-prefix", 0x0200, &save_alt[..], 500),
+            (
+                "out-rid0-cmd",
+                usb_constants::HID_REPORT_TYPE_OUTPUT,
+                &save_cmd[..],
+                1000,
+            ),
+            (
+                "out-rid0-prefix",
+                usb_constants::HID_REPORT_TYPE_OUTPUT,
+                &save_alt[..],
+                500,
+            ),
             (
                 "out-ridcmd",
-                0x0200 | (xkeys_protocol::CMD_SAVE_TO_EEPROM as u16),
+                usb_constants::HID_REPORT_TYPE_OUTPUT | (xkeys_protocol::CMD_SAVE_TO_EEPROM as u16),
                 &save_cmd[..],
                 500,
             ),
             (
                 "out-ridcmd-payload",
-                0x0200 | (xkeys_protocol::CMD_SAVE_TO_EEPROM as u16),
+                usb_constants::HID_REPORT_TYPE_OUTPUT | (xkeys_protocol::CMD_SAVE_TO_EEPROM as u16),
                 &save_payload[..],
                 500,
             ),
-            ("feat-rid0-cmd", 0x0300, &save_cmd[..], 500),
-            ("feat-rid0-prefix", 0x0300, &save_alt[..], 500),
+            (
+                "feat-rid0-cmd",
+                usb_constants::HID_REPORT_TYPE_FEATURE,
+                &save_cmd[..],
+                500,
+            ),
+            (
+                "feat-rid0-prefix",
+                usb_constants::HID_REPORT_TYPE_FEATURE,
+                &save_alt[..],
+                500,
+            ),
             (
                 "feat-ridcmd",
-                0x0300 | (xkeys_protocol::CMD_SAVE_TO_EEPROM as u16),
+                usb_constants::HID_REPORT_TYPE_FEATURE
+                    | (xkeys_protocol::CMD_SAVE_TO_EEPROM as u16),
                 &save_cmd[..],
                 500,
             ),
             (
                 "feat-ridcmd-payload",
-                0x0300 | (xkeys_protocol::CMD_SAVE_TO_EEPROM as u16),
+                usb_constants::HID_REPORT_TYPE_FEATURE
+                    | (xkeys_protocol::CMD_SAVE_TO_EEPROM as u16),
                 &save_payload[..],
                 500,
             ),
         ] {
             let result = handle.write_control(
-                0x21,
-                0x09,
+                usb_constants::HID_REQUEST_TYPE_CLASS_INTERFACE_OUT,
+                usb_constants::HID_SET_REPORT,
                 w_value,
                 interface_num as u16,
                 data,
@@ -2114,14 +2184,14 @@ impl SavantElite {
             long_unprefixed[0] = xkeys_protocol::CMD_SAVE_TO_EEPROM;
 
             for (w_value, data) in [
-                (0x0200, &long_prefixed[..]),
-                (0x0200, &long_unprefixed[..]),
-                (0x0300, &long_prefixed[..]),
-                (0x0300, &long_unprefixed[..]),
+                (usb_constants::HID_REPORT_TYPE_OUTPUT, &long_prefixed[..]),
+                (usb_constants::HID_REPORT_TYPE_OUTPUT, &long_unprefixed[..]),
+                (usb_constants::HID_REPORT_TYPE_FEATURE, &long_prefixed[..]),
+                (usb_constants::HID_REPORT_TYPE_FEATURE, &long_unprefixed[..]),
             ] {
                 let result = handle.write_control(
-                    0x21,
-                    0x09,
+                    usb_constants::HID_REQUEST_TYPE_CLASS_INTERFACE_OUT,
+                    usb_constants::HID_SET_REPORT,
                     w_value,
                     interface_num as u16,
                     data,
@@ -2493,8 +2563,29 @@ mod tests {
     }
 
     #[test]
-    fn normalize_boot_keyboard_report_unprefixed() {
+    fn normalize_boot_keyboard_report_too_short() {
+        let data = [0u8; 7]; // Less than 8 bytes
+        assert!(usb_hid::normalize_boot_keyboard_report(&data).is_none());
+    }
+
+    #[test]
+    fn normalize_boot_keyboard_report_exact_8_bytes() {
         let data = [usb_hid::MOD_LEFT_GUI, 0, usb_hid::KEY_C, 0, 0, 0, 0, 0];
+        let report = usb_hid::normalize_boot_keyboard_report(&data).unwrap();
+        assert_eq!(report, data);
+    }
+
+    #[test]
+    fn normalize_boot_keyboard_report_all_zeros() {
+        let data = [0u8; 8];
+        let report = usb_hid::normalize_boot_keyboard_report(&data).unwrap();
+        assert_eq!(report, data);
+    }
+
+    #[test]
+    fn normalize_boot_keyboard_report_all_keys_pressed() {
+        // Modifier + 6 simultaneous keys (max for boot protocol)
+        let data = [0xFF, 0, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09];
         let report = usb_hid::normalize_boot_keyboard_report(&data).unwrap();
         assert_eq!(report, data);
     }
@@ -2582,10 +2673,7 @@ mod tests {
     #[test]
     fn parse_key_name_case_insensitive() {
         // All key names should be case-insensitive
-        assert_eq!(
-            usb_hid::parse_key_name("A"),
-            usb_hid::parse_key_name("a")
-        );
+        assert_eq!(usb_hid::parse_key_name("A"), usb_hid::parse_key_name("a"));
         assert_eq!(
             usb_hid::parse_key_name("ENTER"),
             usb_hid::parse_key_name("enter")
@@ -2611,7 +2699,10 @@ mod tests {
         assert_eq!(usb_hid::parse_key_name("return"), Some(usb_hid::KEY_ENTER));
         assert_eq!(usb_hid::parse_key_name("esc"), Some(usb_hid::KEY_ESC));
         assert_eq!(usb_hid::parse_key_name("escape"), Some(usb_hid::KEY_ESC));
-        assert_eq!(usb_hid::parse_key_name("backspace"), Some(usb_hid::KEY_BACKSPACE));
+        assert_eq!(
+            usb_hid::parse_key_name("backspace"),
+            Some(usb_hid::KEY_BACKSPACE)
+        );
         assert_eq!(usb_hid::parse_key_name("tab"), Some(usb_hid::KEY_TAB));
         assert_eq!(usb_hid::parse_key_name("space"), Some(usb_hid::KEY_SPACE));
     }
@@ -2767,7 +2858,10 @@ mod tests {
             ("cmd+ctrl", usb_hid::MOD_LEFT_GUI | usb_hid::MOD_LEFT_CTRL),
             ("cmd+shift", usb_hid::MOD_LEFT_GUI | usb_hid::MOD_LEFT_SHIFT),
             ("cmd+alt", usb_hid::MOD_LEFT_GUI | usb_hid::MOD_LEFT_ALT),
-            ("ctrl+shift", usb_hid::MOD_LEFT_CTRL | usb_hid::MOD_LEFT_SHIFT),
+            (
+                "ctrl+shift",
+                usb_hid::MOD_LEFT_CTRL | usb_hid::MOD_LEFT_SHIFT,
+            ),
             ("ctrl+alt", usb_hid::MOD_LEFT_CTRL | usb_hid::MOD_LEFT_ALT),
             ("shift+alt", usb_hid::MOD_LEFT_SHIFT | usb_hid::MOD_LEFT_ALT),
         ];
@@ -2845,10 +2939,14 @@ mod tests {
             ("cmd+enter", usb_hid::MOD_LEFT_GUI, usb_hid::KEY_ENTER),
             ("ctrl+space", usb_hid::MOD_LEFT_CTRL, usb_hid::KEY_SPACE),
             ("alt+tab", usb_hid::MOD_LEFT_ALT, usb_hid::KEY_TAB),
-            ("shift+backspace", usb_hid::MOD_LEFT_SHIFT, usb_hid::KEY_BACKSPACE),
+            (
+                "shift+backspace",
+                usb_hid::MOD_LEFT_SHIFT,
+                usb_hid::KEY_BACKSPACE,
+            ),
             ("cmd+escape", usb_hid::MOD_LEFT_GUI, usb_hid::KEY_ESC),
             ("cmd+return", usb_hid::MOD_LEFT_GUI, usb_hid::KEY_ENTER), // alias
-            ("cmd+esc", usb_hid::MOD_LEFT_GUI, usb_hid::KEY_ESC), // alias
+            ("cmd+esc", usb_hid::MOD_LEFT_GUI, usb_hid::KEY_ESC),      // alias
         ];
 
         for (input, expected_mod, expected_key) in test_cases {

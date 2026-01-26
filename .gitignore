@@ -4,3 +4,6 @@
 
 # bv (beads viewer) local config and caches
 .bv/
+
+# Manual E2E test logs
+/tests/logs/
