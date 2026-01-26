@@ -8,7 +8,7 @@ use predicates::prelude::*;
 
 /// Helper to get the savant command
 fn savant() -> Command {
-    Command::cargo_bin("savant").unwrap()
+    Command::new(env!("CARGO_BIN_EXE_savant"))
 }
 
 // ============================================================================
