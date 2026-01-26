@@ -1423,31 +1423,31 @@ impl SavantElite {
             );
 
             if let Ok(len) = result {
-                if len >= 4 {
-                    // Response format varies by firmware, try to find mod+key in response
-                    // Common formats:
-                    // [cmd, pedal, mod, key, ...] or [0, cmd, pedal, mod, key, ...]
-                    // or [pedal, mod, key, ...]
-                    let (read_mod, read_key) = if response[0] == xkeys_protocol::CMD_GET_KEY_MACRO
-                        && response[1] == pedal_idx
-                    {
-                        // Format: [cmd, pedal, mod, key, ...]
-                        (response[2], response[3])
-                    } else if response[1] == xkeys_protocol::CMD_GET_KEY_MACRO
-                        && response[2] == pedal_idx
-                    {
-                        // Format: [0, cmd, pedal, mod, key, ...]
-                        (response[3], response[4])
-                    } else if response[0] == pedal_idx {
-                        // Format: [pedal, mod, key, ...]
-                        (response[1], response[2])
-                    } else {
-                        // Unknown format, can't verify
-                        continue;
-                    };
+                // Response format varies by firmware, try to find mod+key in response
+                // Common formats:
+                // [cmd, pedal, mod, key, ...] or [0, cmd, pedal, mod, key, ...]
+                // or [pedal, mod, key, ...]
+                let (read_mod, read_key) = if len >= 4
+                    && response[0] == xkeys_protocol::CMD_GET_KEY_MACRO
+                    && response[1] == pedal_idx
+                {
+                    // Format: [cmd, pedal, mod, key, ...] - needs 4 bytes
+                    (response[2], response[3])
+                } else if len >= 5
+                    && response[1] == xkeys_protocol::CMD_GET_KEY_MACRO
+                    && response[2] == pedal_idx
+                {
+                    // Format: [0, cmd, pedal, mod, key, ...] - needs 5 bytes
+                    (response[3], response[4])
+                } else if len >= 3 && response[0] == pedal_idx {
+                    // Format: [pedal, mod, key, ...] - needs 3 bytes
+                    (response[1], response[2])
+                } else {
+                    // Unknown format or too short, can't verify
+                    continue;
+                };
 
-                    return Ok(read_mod == expected_modifiers && read_key == expected_key);
-                }
+                return Ok(read_mod == expected_modifiers && read_key == expected_key);
             }
         }
 
