@@ -25,22 +25,32 @@ impl PedalConfig {
         config_dir.join("pedals.conf")
     }
 
-    fn load() -> Option<Self> {
-        let path = Self::config_path();
-        let content = fs::read_to_string(&path).ok()?;
+    fn parse(content: &str) -> Option<Self> {
         let mut left = String::new();
         let mut middle = String::new();
         let mut right = String::new();
+
         for line in content.lines() {
             let line = line.trim();
-            if let Some(val) = line.strip_prefix("left=") {
-                left = val.trim().to_string();
-            } else if let Some(val) = line.strip_prefix("middle=") {
-                middle = val.trim().to_string();
-            } else if let Some(val) = line.strip_prefix("right=") {
-                right = val.trim().to_string();
+            if line.is_empty() {
+                continue;
+            }
+
+            let Some((key, value)) = line.split_once('=') else {
+                continue;
+            };
+
+            let key = key.trim();
+            let value = value.trim();
+
+            match key {
+                "left" => left = value.to_string(),
+                "middle" => middle = value.to_string(),
+                "right" => right = value.to_string(),
+                _ => {}
             }
         }
+
         if !left.is_empty() && !middle.is_empty() && !right.is_empty() {
             Some(Self {
                 left,
@@ -52,17 +62,49 @@ impl PedalConfig {
         }
     }
 
-    fn save(&self) -> Result<()> {
-        let path = Self::config_path();
+    fn load_from(path: &std::path::Path) -> Option<Self> {
+        let content = fs::read_to_string(path).ok()?;
+        Self::parse(&content)
+    }
+
+    fn load() -> Option<Self> {
+        Self::load_from(&Self::config_path())
+    }
+
+    fn serialize(&self) -> Result<String> {
+        // Validate no newlines in values (would corrupt config file format)
+        for (name, val) in [
+            ("left", &self.left),
+            ("middle", &self.middle),
+            ("right", &self.right),
+        ] {
+            if val.contains('\n') || val.contains('\r') {
+                return Err(anyhow!(
+                    "Key action for {} contains invalid newline character",
+                    name
+                ));
+            }
+        }
+
+        Ok(format!(
+            "left={}\nmiddle={}\nright={}\n",
+            self.left, self.middle, self.right
+        ))
+    }
+
+    fn save_to(&self, path: &std::path::Path) -> Result<()> {
+        let content = self.serialize()?;
+
         if let Some(parent) = path.parent() {
             fs::create_dir_all(parent)?;
         }
-        let content = format!(
-            "left={}\nmiddle={}\nright={}\n",
-            self.left, self.middle, self.right
-        );
-        fs::write(&path, content)?;
+
+        fs::write(path, content)?;
         Ok(())
+    }
+
+    fn save(&self) -> Result<()> {
+        self.save_to(&Self::config_path())
     }
 }
 
@@ -436,7 +478,7 @@ enum Commands {
         data: String,
 
         /// Interface number (0=keyboard, 1=mouse)
-        #[arg(long, default_value = "0")]
+        #[arg(long, default_value = "0", value_parser = clap::value_parser!(i32).range(0..=255))]
         interface: i32,
     },
 }
@@ -449,16 +491,42 @@ struct KeyAction {
 
 impl KeyAction {
     fn from_string(s: &str) -> Result<Self> {
+        // Validate input is not empty or whitespace-only
+        let s = s.trim();
+        if s.is_empty() {
+            return Err(anyhow!("Key action cannot be empty"));
+        }
+
+        // Validate no leading or trailing '+' (would produce empty parts)
+        if s.starts_with('+') || s.ends_with('+') {
+            return Err(anyhow!(
+                "Key action cannot start or end with '+': \"{}\"",
+                s
+            ));
+        }
+
+        // Validate no consecutive '+' characters (e.g., "cmd++c")
+        if s.contains("++") {
+            return Err(anyhow!(
+                "Key action contains empty modifier (consecutive '+'): \"{}\"",
+                s
+            ));
+        }
+
         let parts: Vec<&str> = s.split('+').collect();
         let mut modifiers = 0u8;
         let mut key = 0u8;
 
         for (i, part) in parts.iter().enumerate() {
             let part = part.trim().to_lowercase();
+            if part.is_empty() {
+                // Extra safety check for whitespace-only parts like "cmd + + c"
+                return Err(anyhow!("Key action contains empty component: \"{}\"", s));
+            }
             if i == parts.len() - 1 {
                 // Last part is the key
                 key = usb_hid::parse_key_name(&part)
-                    .ok_or_else(|| anyhow!("Unknown key: {}", part))?;
+                    .ok_or_else(|| anyhow!("Unknown key: \"{}\"", part))?;
             } else {
                 // Modifier
                 match part.as_str() {
@@ -474,7 +542,7 @@ impl KeyAction {
                     "alt" | "option" | "opt" => {
                         modifiers |= usb_hid::MOD_LEFT_ALT;
                     }
-                    _ => return Err(anyhow!("Unknown modifier: {}", part)),
+                    _ => return Err(anyhow!("Unknown modifier: \"{}\"", part)),
                 }
             }
         }
@@ -504,6 +572,17 @@ impl Drop for UsbInterfaceGuard<'_> {
             // Best-effort: if we detached the kernel driver, try to restore it.
             let _ = self.handle.attach_kernel_driver(self.interface_num);
         }
+    }
+}
+
+/// Check if a USB device is still connected by verifying it appears in the device list.
+/// Returns true if the device with the given bus/address is still present.
+fn is_device_still_connected(bus_number: u8, device_address: u8) -> bool {
+    match rusb::devices() {
+        Ok(devices) => devices
+            .iter()
+            .any(|d| d.bus_number() == bus_number && d.address() == device_address),
+        Err(_) => false,
     }
 }
 
@@ -1297,6 +1376,73 @@ impl SavantElite {
         Ok(())
     }
 
+    /// Attempt to verify pedal programming by reading back the macro using GET_KEY_MACRO (0xCD).
+    /// Returns Ok(true) if verified, Ok(false) if mismatch, Err if verification not supported.
+    fn verify_pedal_programming(
+        &self,
+        handle: &rusb::DeviceHandle<GlobalContext>,
+        interface_num: u8,
+        pedal_idx: u8,
+        expected_modifiers: u8,
+        expected_key: u8,
+    ) -> Result<bool> {
+        let mut response = [0u8; 64];
+
+        // Try different w_value formats for GET_REPORT with GET_KEY_MACRO
+        // The report ID may be 0, the command byte, or include pedal index
+        for w_value in [
+            // Feature report with CMD as report ID
+            0x0300 | (xkeys_protocol::CMD_GET_KEY_MACRO as u16),
+            // Feature report with report ID 0
+            0x0300,
+            // Input report with CMD as report ID
+            0x0100 | (xkeys_protocol::CMD_GET_KEY_MACRO as u16),
+            // Input report with report ID 0
+            0x0100,
+        ] {
+            // GET_REPORT request: bmRequestType=0xA1 (device-to-host, class, interface)
+            let result = handle.read_control(
+                0xA1,
+                0x01, // GET_REPORT
+                w_value,
+                interface_num as u16,
+                &mut response,
+                Duration::from_millis(200),
+            );
+
+            if let Ok(len) = result {
+                if len >= 4 {
+                    // Response format varies by firmware, try to find mod+key in response
+                    // Common formats:
+                    // [cmd, pedal, mod, key, ...] or [0, cmd, pedal, mod, key, ...]
+                    // or [pedal, mod, key, ...]
+                    let (read_mod, read_key) = if response[0] == xkeys_protocol::CMD_GET_KEY_MACRO
+                        && response[1] == pedal_idx
+                    {
+                        // Format: [cmd, pedal, mod, key, ...]
+                        (response[2], response[3])
+                    } else if response[1] == xkeys_protocol::CMD_GET_KEY_MACRO
+                        && response[2] == pedal_idx
+                    {
+                        // Format: [0, cmd, pedal, mod, key, ...]
+                        (response[3], response[4])
+                    } else if response[0] == pedal_idx {
+                        // Format: [pedal, mod, key, ...]
+                        (response[1], response[2])
+                    } else {
+                        // Unknown format, can't verify
+                        continue;
+                    };
+
+                    return Ok(read_mod == expected_modifiers && read_key == expected_key);
+                }
+            }
+        }
+
+        // Verification not supported or no valid response
+        Err(anyhow!("GET_KEY_MACRO not supported by device firmware"))
+    }
+
     fn raw_cmd(&self, cmd: &str, data: &str, interface: i32) -> Result<()> {
         self.console.print("");
         self.console.print(
@@ -1318,6 +1464,16 @@ impl SavantElite {
         } else {
             hex::decode(data).context("Invalid data bytes (use hex)")?
         };
+
+        // Validate data length (buffer is 36 bytes: 1 report ID + 1 command + 34 data)
+        const MAX_RAW_DATA_LEN: usize = 34;
+        if data_bytes.len() > MAX_RAW_DATA_LEN {
+            return Err(anyhow!(
+                "Data too long: {} bytes exceeds maximum {} bytes",
+                data_bytes.len(),
+                MAX_RAW_DATA_LEN
+            ));
+        }
 
         let api = HidApi::new().context("Failed to initialize HID API")?;
 
@@ -1406,6 +1562,12 @@ impl SavantElite {
         );
         self.console.print("");
 
+        // Validate key actions upfront (before any device operations)
+        // This ensures we fail fast on invalid input, even if no device is connected
+        let left_action = KeyAction::from_string(left)?;
+        let middle_action = KeyAction::from_string(middle)?;
+        let right_action = KeyAction::from_string(right)?;
+
         // Check if device is in programming mode using libusb
         let mut programming_device: Option<Device<GlobalContext>> = None;
         let mut play_mode_found = false;
@@ -1471,10 +1633,9 @@ impl SavantElite {
 
         let device = programming_device.unwrap();
 
-        // Parse key actions
-        let left_action = KeyAction::from_string(left)?;
-        let middle_action = KeyAction::from_string(middle)?;
-        let right_action = KeyAction::from_string(right)?;
+        // Capture device location for disconnect detection
+        let device_bus = device.bus_number();
+        let device_addr = device.address();
 
         // Show configuration table
         self.console
@@ -1517,6 +1678,15 @@ impl SavantElite {
         ]);
 
         self.console.print_renderable(&config_table);
+        self.console.print("");
+
+        // Pre-programming warning about keeping device connected
+        self.console.print(
+            "  [bold #f39c12]⚠[/]  [#f39c12]Keep the device connected during programming.[/]",
+        );
+        self.console.print(
+            "     [dim]Unplugging mid-operation may leave pedals in a partial state (in RAM, not saved).[/]",
+        );
         self.console.print("");
 
         if dry_run {
@@ -1576,7 +1746,9 @@ impl SavantElite {
                 "  [#f39c12]→[/] Detaching kernel driver from interface {}...",
                 interface_num
             ));
-            handle.detach_kernel_driver(interface_num)?;
+            handle
+                .detach_kernel_driver(interface_num)
+                .context("Failed to detach kernel driver - try running with sudo")?;
             detached_kernel_driver = true;
         }
 
@@ -1798,6 +1970,30 @@ impl SavantElite {
                     "    [bold #2ecc71]✓[/] [#95a5a6]Success[/] [dim]({})[/]",
                     success_method
                 ));
+
+                // Attempt read-back verification using GET_KEY_MACRO (0xCD)
+                // This is best-effort - some firmware versions may not support it
+                std::thread::sleep(Duration::from_millis(50));
+                let verified = self.verify_pedal_programming(
+                    &handle,
+                    interface_num,
+                    pedal_idx,
+                    action.modifiers,
+                    action.key,
+                );
+                match verified {
+                    Ok(true) => {
+                        self.console.print("    [dim]✓ Verified[/]");
+                    }
+                    Ok(false) => {
+                        self.console.print(
+                            "    [bold #f39c12]⚠[/] [#f39c12]Read-back mismatch - verify manually after switching to Play mode[/]",
+                        );
+                    }
+                    Err(_) => {
+                        // Verification not supported or failed - that's OK, just skip silently
+                    }
+                }
             } else {
                 self.console
                     .print("    [bold #e74c3c]✗[/] [#e74c3c]Failed[/]");
@@ -1805,9 +2001,57 @@ impl SavantElite {
             }
 
             std::thread::sleep(Duration::from_millis(50));
+
+            // Check if device is still connected after programming this pedal
+            if !is_device_still_connected(device_bus, device_addr) {
+                self.console.print("");
+                self.console.print(
+                    "  [bold #e74c3c]╭────────────────────────────────────────────────────────────╮[/]",
+                );
+                self.console.print(
+                    "  [bold #e74c3c]│[/]  [bold #e74c3c]⚠[/]  [bold white]DEVICE DISCONNECTED![/]                                  [bold #e74c3c]│[/]",
+                );
+                self.console.print(
+                    "  [bold #e74c3c]╰────────────────────────────────────────────────────────────╯[/]",
+                );
+                self.console.print("");
+                self.console.print(
+                    "  [bold #f39c12]WARNING:[/] The device was unplugged during programming.",
+                );
+                self.console.print(
+                    "  [#95a5a6]Pedals programmed so far are stored in RAM only (not EEPROM).[/]",
+                );
+                self.console.print(
+                    "  [#95a5a6]These changes will be lost when the device is unplugged.[/]",
+                );
+                self.console.print("");
+                self.console
+                    .print("  [bold #f39c12]To complete programming:[/]");
+                self.console.print(
+                    "    [bold #3498db]1.[/] Reconnect the device (keep in Programming mode)",
+                );
+                self.console
+                    .print("    [bold #3498db]2.[/] Run [bold #f1c40f]savant program[/] again");
+                self.console.print("");
+                return Ok(());
+            }
         }
 
         self.console.print("");
+
+        // Final device presence check before EEPROM save
+        if !is_device_still_connected(device_bus, device_addr) {
+            self.console.print(
+                "  [bold #e74c3c]⚠[/]  [bold #e74c3c]Device disconnected before EEPROM save![/]",
+            );
+            self.console.print(
+                "  [#95a5a6]Pedal configurations were sent but NOT saved to permanent storage.[/]",
+            );
+            self.console
+                .print("  [#95a5a6]Reconnect and run [bold #f1c40f]savant program[/] again.[/]");
+            self.console.print("");
+            return Ok(());
+        }
 
         // Save to EEPROM
         self.console
@@ -1896,9 +2140,19 @@ impl SavantElite {
             self.console
                 .print("    [bold #2ecc71]✓[/] [#95a5a6]EEPROM saved[/]");
         } else {
-            self.console.print(
-                "    [bold #f39c12]⚠[/] [#f39c12]Save command may have failed, but programming was done[/]",
-            );
+            // Check if failure was due to device disconnect
+            if !is_device_still_connected(device_bus, device_addr) {
+                self.console.print(
+                    "    [bold #e74c3c]⚠[/] [#e74c3c]Device disconnected during EEPROM save![/]",
+                );
+                self.console.print(
+                    "    [#95a5a6]Pedal settings were programmed to RAM but may not persist.[/]",
+                );
+            } else {
+                self.console.print(
+                    "    [bold #f39c12]⚠[/] [#f39c12]Save command may have failed, but programming was done[/]",
+                );
+            }
         }
 
         self.console.print("");
@@ -1906,6 +2160,20 @@ impl SavantElite {
             "[#3498db]─────────────────────────────────────────────────────────────────────[/]",
         );
         self.console.print("");
+        // Always save config to preserve user's intent (even on partial success)
+        // This helps with `savant info` display and retry attempts
+        let config = PedalConfig {
+            left: left.to_string(),
+            middle: middle.to_string(),
+            right: right.to_string(),
+        };
+        if let Err(e) = config.save() {
+            self.console.print(&format!(
+                "  [dim]Note: Could not save config to disk: {}[/]",
+                e
+            ));
+        }
+
         if pedal_failures.is_empty() && save_success {
             self.console.print(
                 "  [bold #2ecc71]╭────────────────────────────────────────────────────────────╮[/]",
@@ -1916,19 +2184,6 @@ impl SavantElite {
             self.console.print(
                 "  [bold #2ecc71]╰────────────────────────────────────────────────────────────╯[/]",
             );
-
-            // Save config to disk for `savant info` to display later
-            let config = PedalConfig {
-                left: left.to_string(),
-                middle: middle.to_string(),
-                right: right.to_string(),
-            };
-            if let Err(e) = config.save() {
-                self.console.print(&format!(
-                    "  [dim]Note: Could not save config to disk: {}[/]",
-                    e
-                ));
-            }
         } else {
             self.console.print(
                 "  [bold #f39c12]╭────────────────────────────────────────────────────────────╮[/]",
@@ -1969,14 +2224,62 @@ impl SavantElite {
                 "[bold #9b59b6]┌─────────────────────────────────────────────────────────────────┐[/]",
             );
             self.console.print(
-                "[bold #9b59b6]│[/]  [bold #f39c12]👁[/]  [bold white]STARTING MONITOR MODE[/] [dim](test your pedals!)[/]            [bold #9b59b6]│[/]",
+                "[bold #9b59b6]│[/]  [bold #f39c12]👁[/]  [bold white]MONITOR MODE[/] [dim](waiting for device in play mode)[/]       [bold #9b59b6]│[/]",
             );
             self.console.print(
                 "[bold #9b59b6]└─────────────────────────────────────────────────────────────────┘[/]",
             );
             self.console.print("");
             self.console
-                .print("  [#95a5a6]Switch to Play mode, replug USB, then press pedals to test.[/]");
+                .print("  [bold #f39c12]1.[/] Switch the pedal to [bold #2ecc71]Play[/] mode");
+            self.console
+                .print("  [bold #f39c12]2.[/] Replug the USB cable");
+            self.console.print("");
+            self.console.print(
+                "  [#95a5a6]Waiting for device...[/] [dim](60s timeout, Ctrl+C to cancel)[/]",
+            );
+            self.console.print("");
+
+            // Wait for device to appear in play mode (user needs to switch and replug)
+            let wait_start = std::time::Instant::now();
+            let timeout = Duration::from_secs(60);
+            let mut last_reminder = wait_start;
+
+            loop {
+                if self.open_keyboard_interface().is_ok() {
+                    break;
+                }
+
+                if wait_start.elapsed() > timeout {
+                    self.console.print("");
+                    self.console.print(
+                        "  [bold #e74c3c]Timeout![/] Device not detected in play mode after 60s.",
+                    );
+                    self.console.print(
+                        "  Run [bold #f1c40f]savant monitor[/] manually after switching modes.",
+                    );
+                    self.console.print("");
+                    return Ok(());
+                }
+
+                // Reminder every 15 seconds
+                if last_reminder.elapsed() > Duration::from_secs(15) {
+                    let remaining = timeout.saturating_sub(wait_start.elapsed()).as_secs();
+                    self.console.print(&format!(
+                        "  [dim]Still waiting... {}s remaining (switch to Play mode and replug USB)[/]",
+                        remaining
+                    ));
+                    last_reminder = std::time::Instant::now();
+                }
+
+                std::thread::sleep(Duration::from_millis(500));
+            }
+
+            self.console
+                .print("  [bold #2ecc71]✓[/] Device detected in play mode!");
+            self.console.print("");
+            self.console
+                .print("  [#95a5a6]Press pedals to see what keys they send.[/]");
             self.console.print(
                 "  [#95a5a6]Press[/] [bold #e74c3c]Ctrl+C[/] [#95a5a6]to stop monitoring.[/]",
             );
@@ -2031,6 +2334,23 @@ fn main() -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    fn temp_path(filename: &str) -> PathBuf {
+        let mut dir = std::env::temp_dir();
+        let nanos = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_else(|_| Duration::from_secs(0))
+            .as_nanos();
+        dir.push(format!(
+            "savant-elite-test-{}-{}",
+            std::process::id(),
+            nanos
+        ));
+        fs::create_dir_all(&dir).unwrap();
+        dir.push(filename);
+        dir
+    }
 
     #[test]
     fn parse_key_action_cmd_c() {
@@ -2077,10 +2397,113 @@ mod tests {
     }
 
     #[test]
+    fn parse_key_action_rejects_empty() {
+        let err = KeyAction::from_string("").unwrap_err();
+        assert!(err.to_string().contains("cannot be empty"));
+    }
+
+    #[test]
+    fn parse_key_action_rejects_whitespace_only() {
+        let err = KeyAction::from_string("   ").unwrap_err();
+        assert!(err.to_string().contains("cannot be empty"));
+    }
+
+    #[test]
+    fn parse_key_action_rejects_leading_plus() {
+        let err = KeyAction::from_string("+c").unwrap_err();
+        assert!(err.to_string().contains("cannot start or end with"));
+    }
+
+    #[test]
+    fn parse_key_action_rejects_trailing_plus() {
+        let err = KeyAction::from_string("cmd+").unwrap_err();
+        assert!(err.to_string().contains("cannot start or end with"));
+    }
+
+    #[test]
+    fn parse_key_action_rejects_just_plus() {
+        let err = KeyAction::from_string("+").unwrap_err();
+        assert!(err.to_string().contains("cannot start or end with"));
+    }
+
+    #[test]
+    fn parse_key_action_rejects_double_plus() {
+        let err = KeyAction::from_string("cmd++c").unwrap_err();
+        assert!(err.to_string().contains("consecutive"));
+    }
+
+    #[test]
     fn parse_key_name_punctuation() {
         assert_eq!(usb_hid::parse_key_name("-"), Some(0x2D));
         assert_eq!(usb_hid::parse_key_name("="), Some(0x2E));
         assert_eq!(usb_hid::parse_key_name("escape"), Some(usb_hid::KEY_ESC));
+    }
+
+    #[test]
+    fn pedal_config_rejects_newline_in_value() {
+        let config = PedalConfig {
+            left: "cmd+c\nright=evil".to_string(),
+            middle: "cmd+a".to_string(),
+            right: "cmd+v".to_string(),
+        };
+        let err = config.save().unwrap_err();
+        assert!(err.to_string().contains("newline"));
+    }
+
+    #[test]
+    fn pedal_config_rejects_carriage_return_in_value() {
+        let config = PedalConfig {
+            left: "cmd+c".to_string(),
+            middle: "cmd+a\rright=evil".to_string(),
+            right: "cmd+v".to_string(),
+        };
+        let err = config.save().unwrap_err();
+        assert!(err.to_string().contains("newline"));
+    }
+
+    #[test]
+    fn pedal_config_roundtrip() {
+        let config = PedalConfig {
+            left: "cmd+c".to_string(),
+            middle: "cmd+a".to_string(),
+            right: "cmd+v".to_string(),
+        };
+
+        let path = temp_path("roundtrip.conf");
+        config.save_to(&path).unwrap();
+
+        let loaded = PedalConfig::load_from(&path).unwrap();
+        assert_eq!(loaded.left, config.left);
+        assert_eq!(loaded.middle, config.middle);
+        assert_eq!(loaded.right, config.right);
+    }
+
+    #[test]
+    fn pedal_config_load_returns_none_for_missing_file() {
+        let path = temp_path("missing.conf");
+        assert!(PedalConfig::load_from(&path).is_none());
+    }
+
+    #[test]
+    fn pedal_config_load_returns_none_for_partial_file() {
+        let path = temp_path("partial.conf");
+        fs::write(&path, "left=cmd+c\nmiddle=cmd+a\n").unwrap();
+        assert!(PedalConfig::load_from(&path).is_none());
+    }
+
+    #[test]
+    fn pedal_config_load_handles_extra_whitespace() {
+        let path = temp_path("whitespace.conf");
+        fs::write(
+            &path,
+            "  left =  cmd+c  \n\n middle=  cmd+a\n right\t=\tcmd+v  \nunknown=foo\n",
+        )
+        .unwrap();
+        let loaded = PedalConfig::load_from(&path).unwrap();
+
+        assert_eq!(loaded.left, "cmd+c");
+        assert_eq!(loaded.middle, "cmd+a");
+        assert_eq!(loaded.right, "cmd+v");
     }
 
     #[test]

@@ -19,6 +19,11 @@ hex = "0.4"
 rich_rust = "0.1"
 dirs = "5"
 
+[dev-dependencies]
+assert_cmd = "2"
+predicates = "3"
+tempfile = "3"
+
 [[bin]]
 name = "savant"
 path = "src/main.rs"
