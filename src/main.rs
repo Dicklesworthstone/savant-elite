@@ -2333,23 +2333,6 @@ fn main() -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::time::{SystemTime, UNIX_EPOCH};
-
-    fn temp_path(filename: &str) -> PathBuf {
-        let mut dir = std::env::temp_dir();
-        let nanos = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap_or_else(|_| Duration::from_secs(0))
-            .as_nanos();
-        dir.push(format!(
-            "savant-elite-test-{}-{}",
-            std::process::id(),
-            nanos
-        ));
-        fs::create_dir_all(&dir).unwrap();
-        dir.push(filename);
-        dir
-    }
 
     #[test]
     fn parse_key_action_cmd_c() {
@@ -2468,7 +2451,8 @@ mod tests {
             right: "cmd+v".to_string(),
         };
 
-        let path = temp_path("roundtrip.conf");
+        let temp_dir = tempfile::tempdir().unwrap();
+        let path = temp_dir.path().join("roundtrip.conf");
         config.save_to(&path).unwrap();
 
         let loaded = PedalConfig::load_from(&path).unwrap();
@@ -2479,20 +2463,23 @@ mod tests {
 
     #[test]
     fn pedal_config_load_returns_none_for_missing_file() {
-        let path = temp_path("missing.conf");
+        let temp_dir = tempfile::tempdir().unwrap();
+        let path = temp_dir.path().join("missing.conf");
         assert!(PedalConfig::load_from(&path).is_none());
     }
 
     #[test]
     fn pedal_config_load_returns_none_for_partial_file() {
-        let path = temp_path("partial.conf");
+        let temp_dir = tempfile::tempdir().unwrap();
+        let path = temp_dir.path().join("partial.conf");
         fs::write(&path, "left=cmd+c\nmiddle=cmd+a\n").unwrap();
         assert!(PedalConfig::load_from(&path).is_none());
     }
 
     #[test]
     fn pedal_config_load_handles_extra_whitespace() {
-        let path = temp_path("whitespace.conf");
+        let temp_dir = tempfile::tempdir().unwrap();
+        let path = temp_dir.path().join("whitespace.conf");
         fs::write(
             &path,
             "  left =  cmd+c  \n\n middle=  cmd+a\n right\t=\tcmd+v  \nunknown=foo\n",
