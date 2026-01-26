@@ -1434,6 +1434,7 @@ impl SavantElite {
                     // Format: [cmd, pedal, mod, key, ...] - needs 4 bytes
                     (response[2], response[3])
                 } else if len >= 5
+                    && response[0] == 0
                     && response[1] == xkeys_protocol::CMD_GET_KEY_MACRO
                     && response[2] == pedal_idx
                 {

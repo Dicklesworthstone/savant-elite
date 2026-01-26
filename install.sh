@@ -300,7 +300,7 @@ main() {
         echo -e "  ${CYAN}savant info${NC}"
         echo ""
         echo -e "  ${DIM}# Program pedals (device must be in programming mode)${NC}"
-        echo -e "  ${CYAN}savant program --left cmd --middle shift --right ctrl${NC}"
+        echo -e "  ${CYAN}savant program --left cmd+c --middle cmd+a --right cmd+v${NC}"
         echo ""
         echo -e "  ${DIM}# Monitor pedal input in real-time${NC}"
         echo -e "  ${CYAN}savant monitor${NC}"
