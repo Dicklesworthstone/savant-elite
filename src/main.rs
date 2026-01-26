@@ -1606,7 +1606,7 @@ impl SavantElite {
             }
         }
 
-        if programming_device.is_none() {
+        let Some(device) = programming_device else {
             // Show what would be programmed (preview)
             self.print_pedal_visualization(left, middle, right);
 
@@ -1642,9 +1642,7 @@ impl SavantElite {
             }
             self.console.print("");
             return Ok(());
-        }
-
-        let device = programming_device.unwrap();
+        };
 
         // Capture device location for disconnect detection
         let device_bus = device.bus_number();

@@ -90,9 +90,21 @@ log "Wrote config:"
 cat "$CONFIG_FILE" | tee -a "$LOG_FILE"
 
 section "Format checks"
-grep -q '^left=' "$CONFIG_FILE" && log "PASS: left=" || log "FAIL: missing left="
-grep -q '^middle=' "$CONFIG_FILE" && log "PASS: middle=" || log "FAIL: missing middle="
-grep -q '^right=' "$CONFIG_FILE" && log "PASS: right=" || log "FAIL: missing right="
+if grep -q '^left=' "$CONFIG_FILE"; then
+  log "PASS: left="
+else
+  log "FAIL: missing left="
+fi
+if grep -q '^middle=' "$CONFIG_FILE"; then
+  log "PASS: middle="
+else
+  log "FAIL: missing middle="
+fi
+if grep -q '^right=' "$CONFIG_FILE"; then
+  log "PASS: right="
+else
+  log "FAIL: missing right="
+fi
 
 section "Optional manual verification (requires hardware)"
 log "With device connected (any mode), run:"
@@ -101,4 +113,3 @@ log "Expected: pedal visualization reflects cmd+c / cmd+a / cmd+v when device is
 
 section "Done"
 log "Restoring your original config (if any) on exit."
-
