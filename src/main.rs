@@ -2521,4 +2521,115 @@ mod tests {
         let report = usb_hid::normalize_boot_keyboard_report(&prefixed).unwrap();
         assert_eq!(report, [0, 0, usb_hid::KEY_A, 0, 0, 0, 0, 0]);
     }
+
+    // ============================================================================
+    // USB HID Key Code Coverage Tests (BEAD-107)
+    // ============================================================================
+
+    #[test]
+    fn parse_key_name_all_letters() {
+        // USB HID key codes for a-z are 0x04-0x1D
+        let expected_codes: Vec<(char, u8)> = ('a'..='z').zip(0x04u8..=0x1D).collect();
+
+        for (letter, expected) in expected_codes {
+            let result = usb_hid::parse_key_name(&letter.to_string());
+            assert_eq!(
+                result,
+                Some(expected),
+                "Failed for letter '{}': expected 0x{:02X}, got {:?}",
+                letter,
+                expected,
+                result
+            );
+        }
+    }
+
+    #[test]
+    fn parse_key_name_all_numbers() {
+        // USB HID: 1-9 are 0x1E-0x26, 0 is 0x27
+        for (num, expected) in ('1'..='9').zip(0x1Eu8..=0x26) {
+            let result = usb_hid::parse_key_name(&num.to_string());
+            assert_eq!(
+                result,
+                Some(expected),
+                "Failed for number '{}': expected 0x{:02X}, got {:?}",
+                num,
+                expected,
+                result
+            );
+        }
+        // Zero is special
+        assert_eq!(usb_hid::parse_key_name("0"), Some(0x27));
+    }
+
+    #[test]
+    fn parse_key_name_all_function_keys() {
+        // USB HID: F1-F12 are 0x3A-0x45
+        for (i, expected) in (1u8..=12).zip(0x3Au8..=0x45) {
+            let key_name = format!("f{}", i);
+            let result = usb_hid::parse_key_name(&key_name);
+            assert_eq!(
+                result,
+                Some(expected),
+                "Failed for '{}': expected 0x{:02X}, got {:?}",
+                key_name,
+                expected,
+                result
+            );
+        }
+    }
+
+    #[test]
+    fn parse_key_name_case_insensitive() {
+        // All key names should be case-insensitive
+        assert_eq!(
+            usb_hid::parse_key_name("A"),
+            usb_hid::parse_key_name("a")
+        );
+        assert_eq!(
+            usb_hid::parse_key_name("ENTER"),
+            usb_hid::parse_key_name("enter")
+        );
+        assert_eq!(
+            usb_hid::parse_key_name("F12"),
+            usb_hid::parse_key_name("f12")
+        );
+        assert_eq!(
+            usb_hid::parse_key_name("SPACE"),
+            usb_hid::parse_key_name("space")
+        );
+        assert_eq!(
+            usb_hid::parse_key_name("Tab"),
+            usb_hid::parse_key_name("TAB")
+        );
+    }
+
+    #[test]
+    fn parse_key_name_special_keys() {
+        // Verify special key mappings
+        assert_eq!(usb_hid::parse_key_name("enter"), Some(usb_hid::KEY_ENTER));
+        assert_eq!(usb_hid::parse_key_name("return"), Some(usb_hid::KEY_ENTER));
+        assert_eq!(usb_hid::parse_key_name("esc"), Some(usb_hid::KEY_ESC));
+        assert_eq!(usb_hid::parse_key_name("escape"), Some(usb_hid::KEY_ESC));
+        assert_eq!(usb_hid::parse_key_name("backspace"), Some(usb_hid::KEY_BACKSPACE));
+        assert_eq!(usb_hid::parse_key_name("tab"), Some(usb_hid::KEY_TAB));
+        assert_eq!(usb_hid::parse_key_name("space"), Some(usb_hid::KEY_SPACE));
+    }
+
+    #[test]
+    fn parse_key_name_arrow_keys() {
+        assert_eq!(usb_hid::parse_key_name("left"), Some(usb_hid::KEY_LEFT));
+        assert_eq!(usb_hid::parse_key_name("right"), Some(usb_hid::KEY_RIGHT));
+        assert_eq!(usb_hid::parse_key_name("up"), Some(usb_hid::KEY_UP));
+        assert_eq!(usb_hid::parse_key_name("down"), Some(usb_hid::KEY_DOWN));
+    }
+
+    #[test]
+    fn parse_key_name_returns_none_for_unknown() {
+        assert_eq!(usb_hid::parse_key_name("notakey"), None);
+        assert_eq!(usb_hid::parse_key_name(""), None);
+        assert_eq!(usb_hid::parse_key_name("f13"), None); // Only F1-F12 supported
+        assert_eq!(usb_hid::parse_key_name("ctrl"), None); // Modifier, not key
+        assert_eq!(usb_hid::parse_key_name("cmd"), None); // Modifier, not key
+    }
 }
