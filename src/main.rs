@@ -2215,7 +2215,10 @@ impl SavantElite {
                     "    [bold #e74c3c]⚠[/] [#e74c3c]Device disconnected during EEPROM save![/]",
                 );
                 self.console.print(
-                    "    [#95a5a6]Pedal settings were programmed to RAM but may not persist.[/]",
+                    "    [#95a5a6]The save was interrupted - settings may or may not have persisted.[/]",
+                );
+                self.console.print(
+                    "    [#95a5a6]Reconnect and test the pedals to verify, or re-run savant program.[/]",
                 );
             } else {
                 self.console.print(
