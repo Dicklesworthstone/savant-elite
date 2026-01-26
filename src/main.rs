@@ -2731,4 +2731,225 @@ mod tests {
         let action4 = KeyAction::from_string("ctrl+shift+a").unwrap();
         assert_eq!(action3.modifiers, action4.modifiers);
     }
+
+    #[test]
+    fn key_action_mixed_alias_combinations() {
+        // Test mixing different aliases for the same modifier type in combinations
+        let action1 = KeyAction::from_string("command+control+a").unwrap();
+        assert_eq!(
+            action1.modifiers,
+            usb_hid::MOD_LEFT_GUI | usb_hid::MOD_LEFT_CTRL
+        );
+
+        let action2 = KeyAction::from_string("gui+option+a").unwrap();
+        assert_eq!(
+            action2.modifiers,
+            usb_hid::MOD_LEFT_GUI | usb_hid::MOD_LEFT_ALT
+        );
+
+        let action3 = KeyAction::from_string("meta+opt+shift+a").unwrap();
+        assert_eq!(
+            action3.modifiers,
+            usb_hid::MOD_LEFT_GUI | usb_hid::MOD_LEFT_ALT | usb_hid::MOD_LEFT_SHIFT
+        );
+
+        let action4 = KeyAction::from_string("super+control+option+a").unwrap();
+        assert_eq!(
+            action4.modifiers,
+            usb_hid::MOD_LEFT_GUI | usb_hid::MOD_LEFT_CTRL | usb_hid::MOD_LEFT_ALT
+        );
+    }
+
+    #[test]
+    fn key_action_two_modifier_combinations() {
+        // Exhaustive two-modifier combinations
+        let combos = [
+            ("cmd+ctrl", usb_hid::MOD_LEFT_GUI | usb_hid::MOD_LEFT_CTRL),
+            ("cmd+shift", usb_hid::MOD_LEFT_GUI | usb_hid::MOD_LEFT_SHIFT),
+            ("cmd+alt", usb_hid::MOD_LEFT_GUI | usb_hid::MOD_LEFT_ALT),
+            ("ctrl+shift", usb_hid::MOD_LEFT_CTRL | usb_hid::MOD_LEFT_SHIFT),
+            ("ctrl+alt", usb_hid::MOD_LEFT_CTRL | usb_hid::MOD_LEFT_ALT),
+            ("shift+alt", usb_hid::MOD_LEFT_SHIFT | usb_hid::MOD_LEFT_ALT),
+        ];
+
+        for (mods, expected) in combos {
+            let input = format!("{}+a", mods);
+            let action = KeyAction::from_string(&input).unwrap();
+            assert_eq!(
+                action.modifiers, expected,
+                "Two-mod combo '{}' failed: expected 0x{:02X}, got 0x{:02X}",
+                input, expected, action.modifiers
+            );
+        }
+    }
+
+    #[test]
+    fn key_action_three_modifier_combinations() {
+        // All three-modifier combinations
+        let combos = [
+            (
+                "cmd+ctrl+shift",
+                usb_hid::MOD_LEFT_GUI | usb_hid::MOD_LEFT_CTRL | usb_hid::MOD_LEFT_SHIFT,
+            ),
+            (
+                "cmd+ctrl+alt",
+                usb_hid::MOD_LEFT_GUI | usb_hid::MOD_LEFT_CTRL | usb_hid::MOD_LEFT_ALT,
+            ),
+            (
+                "cmd+shift+alt",
+                usb_hid::MOD_LEFT_GUI | usb_hid::MOD_LEFT_SHIFT | usb_hid::MOD_LEFT_ALT,
+            ),
+            (
+                "ctrl+shift+alt",
+                usb_hid::MOD_LEFT_CTRL | usb_hid::MOD_LEFT_SHIFT | usb_hid::MOD_LEFT_ALT,
+            ),
+        ];
+
+        for (mods, expected) in combos {
+            let input = format!("{}+a", mods);
+            let action = KeyAction::from_string(&input).unwrap();
+            assert_eq!(
+                action.modifiers, expected,
+                "Three-mod combo '{}' failed: expected 0x{:02X}, got 0x{:02X}",
+                input, expected, action.modifiers
+            );
+        }
+    }
+
+    #[test]
+    fn key_action_modifiers_with_function_keys() {
+        // Test modifiers combined with function keys
+        let action1 = KeyAction::from_string("cmd+f1").unwrap();
+        assert_eq!(action1.modifiers, usb_hid::MOD_LEFT_GUI);
+        assert_eq!(action1.key, usb_hid::KEY_F1);
+
+        let action2 = KeyAction::from_string("ctrl+shift+f5").unwrap();
+        assert_eq!(
+            action2.modifiers,
+            usb_hid::MOD_LEFT_CTRL | usb_hid::MOD_LEFT_SHIFT
+        );
+        assert_eq!(action2.key, usb_hid::KEY_F5);
+
+        let action3 = KeyAction::from_string("cmd+alt+f12").unwrap();
+        assert_eq!(
+            action3.modifiers,
+            usb_hid::MOD_LEFT_GUI | usb_hid::MOD_LEFT_ALT
+        );
+        assert_eq!(action3.key, usb_hid::KEY_F12);
+    }
+
+    #[test]
+    fn key_action_modifiers_with_special_keys() {
+        // Test modifiers combined with special keys
+        let test_cases = [
+            ("cmd+enter", usb_hid::MOD_LEFT_GUI, usb_hid::KEY_ENTER),
+            ("ctrl+space", usb_hid::MOD_LEFT_CTRL, usb_hid::KEY_SPACE),
+            ("alt+tab", usb_hid::MOD_LEFT_ALT, usb_hid::KEY_TAB),
+            ("shift+backspace", usb_hid::MOD_LEFT_SHIFT, usb_hid::KEY_BACKSPACE),
+            ("cmd+escape", usb_hid::MOD_LEFT_GUI, usb_hid::KEY_ESC),
+            ("cmd+return", usb_hid::MOD_LEFT_GUI, usb_hid::KEY_ENTER), // alias
+            ("cmd+esc", usb_hid::MOD_LEFT_GUI, usb_hid::KEY_ESC), // alias
+        ];
+
+        for (input, expected_mod, expected_key) in test_cases {
+            let action = KeyAction::from_string(input).unwrap();
+            assert_eq!(
+                action.modifiers, expected_mod,
+                "Modifier for '{}' failed",
+                input
+            );
+            assert_eq!(action.key, expected_key, "Key for '{}' failed", input);
+        }
+    }
+
+    #[test]
+    fn key_action_modifiers_with_arrow_keys() {
+        // Test modifiers combined with arrow keys
+        let test_cases = [
+            ("cmd+left", usb_hid::MOD_LEFT_GUI, usb_hid::KEY_LEFT),
+            ("cmd+right", usb_hid::MOD_LEFT_GUI, usb_hid::KEY_RIGHT),
+            ("cmd+up", usb_hid::MOD_LEFT_GUI, usb_hid::KEY_UP),
+            ("cmd+down", usb_hid::MOD_LEFT_GUI, usb_hid::KEY_DOWN),
+            (
+                "cmd+shift+left",
+                usb_hid::MOD_LEFT_GUI | usb_hid::MOD_LEFT_SHIFT,
+                usb_hid::KEY_LEFT,
+            ),
+            (
+                "ctrl+alt+up",
+                usb_hid::MOD_LEFT_CTRL | usb_hid::MOD_LEFT_ALT,
+                usb_hid::KEY_UP,
+            ),
+        ];
+
+        for (input, expected_mod, expected_key) in test_cases {
+            let action = KeyAction::from_string(input).unwrap();
+            assert_eq!(
+                action.modifiers, expected_mod,
+                "Arrow key modifier for '{}' failed",
+                input
+            );
+            assert_eq!(action.key, expected_key, "Arrow key for '{}' failed", input);
+        }
+    }
+
+    #[test]
+    fn key_action_modifiers_with_punctuation() {
+        // Test modifiers combined with punctuation keys
+        let action1 = KeyAction::from_string("cmd+-").unwrap();
+        assert_eq!(action1.modifiers, usb_hid::MOD_LEFT_GUI);
+        assert_eq!(action1.key, 0x2D); // minus
+
+        let action2 = KeyAction::from_string("cmd+=").unwrap();
+        assert_eq!(action2.modifiers, usb_hid::MOD_LEFT_GUI);
+        assert_eq!(action2.key, 0x2E); // equals
+
+        let action3 = KeyAction::from_string("ctrl+shift+-").unwrap();
+        assert_eq!(
+            action3.modifiers,
+            usb_hid::MOD_LEFT_CTRL | usb_hid::MOD_LEFT_SHIFT
+        );
+    }
+
+    #[test]
+    fn key_action_case_variations_all_aliases() {
+        // Comprehensive case variations for all aliases
+        let test_cases = [
+            // GUI variants
+            ("CMD+x", usb_hid::MOD_LEFT_GUI),
+            ("Cmd+x", usb_hid::MOD_LEFT_GUI),
+            ("COMMAND+x", usb_hid::MOD_LEFT_GUI),
+            ("Command+x", usb_hid::MOD_LEFT_GUI),
+            ("GUI+x", usb_hid::MOD_LEFT_GUI),
+            ("Gui+x", usb_hid::MOD_LEFT_GUI),
+            ("META+x", usb_hid::MOD_LEFT_GUI),
+            ("Meta+x", usb_hid::MOD_LEFT_GUI),
+            ("SUPER+x", usb_hid::MOD_LEFT_GUI),
+            ("Super+x", usb_hid::MOD_LEFT_GUI),
+            // CTRL variants
+            ("CTRL+x", usb_hid::MOD_LEFT_CTRL),
+            ("Ctrl+x", usb_hid::MOD_LEFT_CTRL),
+            ("CONTROL+x", usb_hid::MOD_LEFT_CTRL),
+            ("Control+x", usb_hid::MOD_LEFT_CTRL),
+            // ALT variants
+            ("ALT+x", usb_hid::MOD_LEFT_ALT),
+            ("Alt+x", usb_hid::MOD_LEFT_ALT),
+            ("OPTION+x", usb_hid::MOD_LEFT_ALT),
+            ("Option+x", usb_hid::MOD_LEFT_ALT),
+            ("OPT+x", usb_hid::MOD_LEFT_ALT),
+            ("Opt+x", usb_hid::MOD_LEFT_ALT),
+            // SHIFT variants
+            ("SHIFT+x", usb_hid::MOD_LEFT_SHIFT),
+            ("Shift+x", usb_hid::MOD_LEFT_SHIFT),
+        ];
+
+        for (input, expected_mod) in test_cases {
+            let action = KeyAction::from_string(input).unwrap();
+            assert_eq!(
+                action.modifiers, expected_mod,
+                "Case variation '{}' failed: expected 0x{:02X}, got 0x{:02X}",
+                input, expected_mod, action.modifiers
+            );
+        }
+    }
 }
