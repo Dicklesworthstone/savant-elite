@@ -197,6 +197,8 @@ main() {
             exit 1
         fi
     fi
+    # Accept either "0.1.3" or "v0.1.3"
+    version="${version#v}"
     log_info "Version: ${version}"
 
     # Setup paths
