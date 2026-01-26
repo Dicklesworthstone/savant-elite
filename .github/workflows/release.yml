@@ -38,7 +38,7 @@ jobs:
             artifact: savant
             asset_name: savant-darwin-arm64
           # macOS Intel (x86_64)
-          - os: macos-15-intel
+          - os: macos-13
             target: x86_64-apple-darwin
             artifact: savant
             asset_name: savant-darwin-amd64
