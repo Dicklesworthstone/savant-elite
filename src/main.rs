@@ -2632,4 +2632,103 @@ mod tests {
         assert_eq!(usb_hid::parse_key_name("ctrl"), None); // Modifier, not key
         assert_eq!(usb_hid::parse_key_name("cmd"), None); // Modifier, not key
     }
+
+    // ============================================================================
+    // Modifier Parsing Coverage Tests (BEAD-108)
+    // ============================================================================
+
+    #[test]
+    fn key_action_cmd_modifier_aliases() {
+        // All cmd aliases should map to MOD_LEFT_GUI
+        for alias in ["cmd", "command", "gui", "meta", "super"] {
+            let action = KeyAction::from_string(&format!("{}+a", alias)).unwrap();
+            assert_eq!(
+                action.modifiers,
+                usb_hid::MOD_LEFT_GUI,
+                "Failed for '{}'",
+                alias
+            );
+            assert_eq!(action.key, usb_hid::KEY_A);
+        }
+    }
+
+    #[test]
+    fn key_action_ctrl_modifier_aliases() {
+        // All ctrl aliases should map to MOD_LEFT_CTRL
+        for alias in ["ctrl", "control"] {
+            let action = KeyAction::from_string(&format!("{}+a", alias)).unwrap();
+            assert_eq!(
+                action.modifiers,
+                usb_hid::MOD_LEFT_CTRL,
+                "Failed for '{}'",
+                alias
+            );
+        }
+    }
+
+    #[test]
+    fn key_action_alt_modifier_aliases() {
+        // All alt aliases should map to MOD_LEFT_ALT
+        for alias in ["alt", "option", "opt"] {
+            let action = KeyAction::from_string(&format!("{}+a", alias)).unwrap();
+            assert_eq!(
+                action.modifiers,
+                usb_hid::MOD_LEFT_ALT,
+                "Failed for '{}'",
+                alias
+            );
+        }
+    }
+
+    #[test]
+    fn key_action_shift_modifier() {
+        let action = KeyAction::from_string("shift+a").unwrap();
+        assert_eq!(action.modifiers, usb_hid::MOD_LEFT_SHIFT);
+        assert_eq!(action.key, usb_hid::KEY_A);
+    }
+
+    #[test]
+    fn key_action_all_four_modifiers() {
+        // Combine all four modifiers
+        let action = KeyAction::from_string("cmd+ctrl+shift+alt+a").unwrap();
+        let expected = usb_hid::MOD_LEFT_GUI
+            | usb_hid::MOD_LEFT_CTRL
+            | usb_hid::MOD_LEFT_SHIFT
+            | usb_hid::MOD_LEFT_ALT;
+        assert_eq!(action.modifiers, expected);
+        assert_eq!(action.key, usb_hid::KEY_A);
+    }
+
+    #[test]
+    fn key_action_modifier_order_independent() {
+        // Order of modifiers shouldn't matter
+        let action1 = KeyAction::from_string("cmd+ctrl+a").unwrap();
+        let action2 = KeyAction::from_string("ctrl+cmd+a").unwrap();
+        assert_eq!(action1.modifiers, action2.modifiers);
+        assert_eq!(action1.key, action2.key);
+
+        let action3 = KeyAction::from_string("shift+alt+ctrl+cmd+z").unwrap();
+        let action4 = KeyAction::from_string("cmd+ctrl+alt+shift+z").unwrap();
+        assert_eq!(action3.modifiers, action4.modifiers);
+    }
+
+    #[test]
+    fn key_action_duplicate_modifiers_idempotent() {
+        // Specifying the same modifier twice should be idempotent
+        let action1 = KeyAction::from_string("cmd+a").unwrap();
+        let action2 = KeyAction::from_string("cmd+cmd+a").unwrap();
+        assert_eq!(action1.modifiers, action2.modifiers);
+    }
+
+    #[test]
+    fn key_action_modifier_case_insensitive() {
+        // Modifiers should be case-insensitive
+        let action1 = KeyAction::from_string("CMD+a").unwrap();
+        let action2 = KeyAction::from_string("cmd+a").unwrap();
+        assert_eq!(action1.modifiers, action2.modifiers);
+
+        let action3 = KeyAction::from_string("CTRL+SHIFT+a").unwrap();
+        let action4 = KeyAction::from_string("ctrl+shift+a").unwrap();
+        assert_eq!(action3.modifiers, action4.modifiers);
+    }
 }
