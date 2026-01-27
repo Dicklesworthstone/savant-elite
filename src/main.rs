@@ -438,6 +438,10 @@ mod usb_hid {
     long_about = "Native macOS programmer for the discontinued Kinesis Savant Elite USB foot pedal.\n\nProgram your foot pedals directly via USB—no Windows VM, no 32-bit compatibility hacks."
 )]
 struct Cli {
+    /// Enable verbose output for debugging
+    #[arg(short, long, global = true)]
+    verbose: bool,
+
     #[command(subcommand)]
     command: Commands,
 }
@@ -583,6 +587,7 @@ impl KeyAction {
 
 struct SavantElite {
     console: Console,
+    verbose: bool,
 }
 
 struct UsbInterfaceGuard<'a> {
@@ -617,10 +622,35 @@ fn is_device_still_connected(bus_number: u8, device_address: u8) -> bool {
 }
 
 impl SavantElite {
-    fn new() -> Result<Self> {
+    fn new(verbose: bool) -> Result<Self> {
         Ok(Self {
             console: Console::new(),
+            verbose,
         })
+    }
+
+    /// Print verbose output to stderr if verbose mode is enabled
+    fn verbose(&self, msg: &str) {
+        if self.verbose {
+            eprintln!("[verbose] {}", msg);
+        }
+    }
+
+    /// Print verbose hex data to stderr if verbose mode is enabled
+    fn verbose_hex(&self, label: &str, data: &[u8]) {
+        if self.verbose {
+            let hex: Vec<String> = data.iter().map(|b| format!("{:02X}", b)).collect();
+            if data.len() <= 16 {
+                eprintln!("[verbose] {}: [{}]", label, hex.join(" "));
+            } else {
+                eprintln!(
+                    "[verbose] {}: [{}...] ({} bytes)",
+                    label,
+                    hex[..16].join(" "),
+                    data.len()
+                );
+            }
+        }
     }
 
     fn print_banner(&self) {
@@ -751,7 +781,9 @@ impl SavantElite {
     }
 
     fn find_device(&self) -> Result<()> {
+        self.verbose("Initializing HID API...");
         let api = HidApi::new().context("Failed to initialize HID API")?;
+        self.verbose("HID API initialized successfully");
 
         self.print_banner();
 
@@ -760,6 +792,7 @@ impl SavantElite {
         let mut found_any = false;
         let mut devices_info: Vec<DeviceInfo> = Vec::new();
 
+        self.verbose("Enumerating HID devices...");
         for device in api.device_list() {
             if device.vendor_id() == KINESIS_VID
                 && (device.product_id() == SAVANT_ELITE_PID
@@ -771,6 +804,13 @@ impl SavantElite {
                 } else {
                     "PLAY".to_string()
                 };
+                self.verbose(&format!(
+                    "Found Savant Elite ({} mode): VID={:#06X} PID={:#06X} interface={}",
+                    mode,
+                    device.vendor_id(),
+                    device.product_id(),
+                    device.interface_number()
+                ));
                 devices_info.push((
                     mode,
                     format!("0x{:04X}", device.vendor_id()),
@@ -841,9 +881,18 @@ impl SavantElite {
             }
 
             // Show current pedal configuration from saved config
+            self.verbose(&format!(
+                "Loading config from: {}",
+                PedalConfig::config_path().display()
+            ));
             if let Some(config) = PedalConfig::load() {
+                self.verbose(&format!(
+                    "Config loaded: left={}, middle={}, right={}",
+                    config.left, config.middle, config.right
+                ));
                 self.print_pedal_visualization(&config.left, &config.middle, &config.right);
             } else {
+                self.verbose("No saved config found");
                 self.console.print("");
                 self.console.print(
                     "[bold #f39c12]┌──────────────────────────────────────────────────────────┐[/]",
@@ -881,17 +930,26 @@ impl SavantElite {
     }
 
     fn open_keyboard_interface(&self) -> Result<HidDevice> {
+        self.verbose("Initializing HID API for keyboard interface...");
         let api = HidApi::new().context("Failed to initialize HID API")?;
 
         // Find the keyboard interface (usage page 1, usage 6)
+        self.verbose("Searching for keyboard interface (usage_page=0x01, usage=0x06)...");
         for device in api.device_list() {
             if device.vendor_id() == KINESIS_VID
                 && device.product_id() == SAVANT_ELITE_PID
                 && device.usage_page() == 0x01
                 && device.usage() == 0x06
             {
+                self.verbose(&format!(
+                    "Found keyboard interface at path: {}",
+                    device.path().to_string_lossy()
+                ));
                 match device.open_device(&api) {
-                    Ok(dev) => return Ok(dev),
+                    Ok(dev) => {
+                        self.verbose("Keyboard interface opened successfully");
+                        return Ok(dev);
+                    }
                     Err(e) => {
                         let msg = e.to_string();
                         if msg.contains("privilege violation") || msg.contains("0xE00002C1") {
@@ -938,11 +996,13 @@ impl SavantElite {
             "[#3498db]─────────────────────────────────────────────────────────────────────[/]",
         );
 
+        self.verbose("Setting non-blocking mode on HID device");
         device.set_blocking_mode(false)?;
 
         let mut buf = [0u8; 64];
         let mut last_report = [0u8; 8];
         let start = std::time::Instant::now();
+        self.verbose("Starting monitor loop...");
 
         loop {
             if duration_secs > 0 && start.elapsed().as_secs() >= duration_secs {
@@ -957,12 +1017,15 @@ impl SavantElite {
 
             match device.read_timeout(&mut buf, 100) {
                 Ok(len) if len > 0 => {
+                    self.verbose_hex("Raw HID read", &buf[..len]);
                     let Some(report) = usb_hid::normalize_boot_keyboard_report(&buf[..len]) else {
+                        self.verbose("  -> Could not normalize to boot keyboard report");
                         continue;
                     };
 
                     if report != last_report {
                         last_report = report;
+                        self.verbose_hex("Normalized report", &report);
 
                         let modifiers = report[0];
                         let keys: Vec<u8> =
@@ -1593,11 +1656,29 @@ impl SavantElite {
 
         // Validate key actions upfront (before any device operations)
         // This ensures we fail fast on invalid input, even if no device is connected
+        self.verbose(&format!("Parsing left pedal action: '{}'", left));
         let left_action = KeyAction::from_string(left)?;
+        self.verbose(&format!(
+            "  -> modifiers=0x{:02X}, key=0x{:02X}",
+            left_action.modifiers, left_action.key
+        ));
+
+        self.verbose(&format!("Parsing middle pedal action: '{}'", middle));
         let middle_action = KeyAction::from_string(middle)?;
+        self.verbose(&format!(
+            "  -> modifiers=0x{:02X}, key=0x{:02X}",
+            middle_action.modifiers, middle_action.key
+        ));
+
+        self.verbose(&format!("Parsing right pedal action: '{}'", right));
         let right_action = KeyAction::from_string(right)?;
+        self.verbose(&format!(
+            "  -> modifiers=0x{:02X}, key=0x{:02X}",
+            right_action.modifiers, right_action.key
+        ));
 
         // Check if device is in programming mode using libusb
+        self.verbose("Scanning for Savant Elite device via libusb...");
         let mut programming_device: Option<Device<GlobalContext>> = None;
         let mut play_mode_found = false;
 
@@ -1751,9 +1832,11 @@ impl SavantElite {
         self.console.print("");
 
         // Open device
+        self.verbose("Opening USB device...");
         let handle = device
             .open()
             .context("Failed to open device (try running with sudo)")?;
+        self.verbose("USB device opened successfully");
 
         // Get device config to find endpoints
         let config = device
@@ -2585,7 +2668,11 @@ impl SavantElite {
 
 fn main() -> Result<()> {
     let cli = Cli::parse();
-    let savant = SavantElite::new()?;
+    let savant = SavantElite::new(cli.verbose)?;
+
+    if cli.verbose {
+        eprintln!("[verbose] Verbose mode enabled");
+    }
 
     match cli.command {
         Commands::Info => {

@@ -515,3 +515,49 @@ fn cli_completions_rejects_invalid_shell() {
         .failure()
         .stderr(predicate::str::contains("invalid value"));
 }
+
+// ============================================================================
+// Verbose Mode Tests
+// ============================================================================
+
+#[test]
+fn cli_verbose_flag_accepted() {
+    // -v flag should be accepted on any command
+    savant().args(["-v", "keys"]).assert().success();
+}
+
+#[test]
+fn cli_verbose_long_flag_accepted() {
+    // --verbose flag should be accepted on any command
+    savant().args(["--verbose", "keys"]).assert().success();
+}
+
+#[test]
+fn cli_verbose_output_goes_to_stderr() {
+    // Verbose output should go to stderr, not stdout
+    savant()
+        .args(["-v", "keys", "--json"])
+        .assert()
+        .success()
+        .stderr(predicate::str::contains("[verbose]"))
+        .stdout(predicate::str::contains("[verbose]").not());
+}
+
+#[test]
+fn cli_verbose_shows_mode_enabled() {
+    savant()
+        .args(["-v", "keys"])
+        .assert()
+        .success()
+        .stderr(predicate::str::contains("Verbose mode enabled"));
+}
+
+#[test]
+fn cli_verbose_with_dry_run() {
+    // Verbose mode should work with dry-run
+    savant()
+        .args(["-v", "program", "--left", "a", "--dry-run"])
+        .assert()
+        .success()
+        .stderr(predicate::str::contains("Parsing left pedal action"));
+}
