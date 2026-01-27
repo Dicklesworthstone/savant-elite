@@ -673,6 +673,10 @@ struct Cli {
     #[arg(long, global = true)]
     json: bool,
 
+    /// USB operation timeout in milliseconds [default: 500]
+    #[arg(long, global = true, value_name = "MS", value_parser = clap::value_parser!(u64).range(100..=600000))]
+    timeout: Option<u64>,
+
     #[command(subcommand)]
     command: Commands,
 }
@@ -891,6 +895,7 @@ struct SavantElite {
     console: Console,
     verbose: bool,
     json_output: bool,
+    timeout_ms: u64,
 }
 
 struct UsbInterfaceGuard<'a> {
@@ -924,12 +929,16 @@ fn is_device_still_connected(bus_number: u8, device_address: u8) -> bool {
     }
 }
 
+/// Default USB operation timeout in milliseconds
+const DEFAULT_USB_TIMEOUT_MS: u64 = 500;
+
 impl SavantElite {
-    fn new(verbose: bool, json_output: bool) -> Result<Self> {
+    fn new(verbose: bool, json_output: bool, timeout_ms: u64) -> Result<Self> {
         Ok(Self {
             console: Console::new(),
             verbose,
             json_output,
+            timeout_ms,
         })
     }
 
@@ -2430,7 +2439,7 @@ impl SavantElite {
                     w_value,
                     interface_num as u16,
                     data,
-                    Duration::from_millis(500),
+                    Duration::from_millis(self.timeout_ms),
                 );
                 if result.is_ok() {
                     success = true;
@@ -2482,7 +2491,7 @@ impl SavantElite {
                         w_value,
                         interface_num as u16,
                         data,
-                        Duration::from_millis(500),
+                        Duration::from_millis(self.timeout_ms),
                     );
                     if result.is_ok() {
                         success = true;
@@ -2500,7 +2509,7 @@ impl SavantElite {
                     ((action.key as u16) << 8) | (action.modifiers as u16),
                     pedal_idx as u16,
                     &[],
-                    Duration::from_millis(500),
+                    Duration::from_millis(self.timeout_ms),
                 );
                 if result.is_ok() {
                     success = true;
@@ -2603,56 +2612,48 @@ impl SavantElite {
         let save_payload = [0u8; 8];
         let mut save_success = false;
 
-        for (_fmt_name, w_value, data, timeout_ms) in [
+        for (_fmt_name, w_value, data) in [
             (
                 "out-rid0-cmd",
                 usb_constants::HID_REPORT_TYPE_OUTPUT,
                 &save_cmd[..],
-                1000,
             ),
             (
                 "out-rid0-prefix",
                 usb_constants::HID_REPORT_TYPE_OUTPUT,
                 &save_alt[..],
-                500,
             ),
             (
                 "out-ridcmd",
                 usb_constants::HID_REPORT_TYPE_OUTPUT | (xkeys_protocol::CMD_SAVE_TO_EEPROM as u16),
                 &save_cmd[..],
-                500,
             ),
             (
                 "out-ridcmd-payload",
                 usb_constants::HID_REPORT_TYPE_OUTPUT | (xkeys_protocol::CMD_SAVE_TO_EEPROM as u16),
                 &save_payload[..],
-                500,
             ),
             (
                 "feat-rid0-cmd",
                 usb_constants::HID_REPORT_TYPE_FEATURE,
                 &save_cmd[..],
-                500,
             ),
             (
                 "feat-rid0-prefix",
                 usb_constants::HID_REPORT_TYPE_FEATURE,
                 &save_alt[..],
-                500,
             ),
             (
                 "feat-ridcmd",
                 usb_constants::HID_REPORT_TYPE_FEATURE
                     | (xkeys_protocol::CMD_SAVE_TO_EEPROM as u16),
                 &save_cmd[..],
-                500,
             ),
             (
                 "feat-ridcmd-payload",
                 usb_constants::HID_REPORT_TYPE_FEATURE
                     | (xkeys_protocol::CMD_SAVE_TO_EEPROM as u16),
                 &save_payload[..],
-                500,
             ),
         ] {
             let result = handle.write_control(
@@ -2661,7 +2662,7 @@ impl SavantElite {
                 w_value,
                 interface_num as u16,
                 data,
-                Duration::from_millis(timeout_ms),
+                Duration::from_millis(self.timeout_ms),
             );
             if result.is_ok() {
                 save_success = true;
@@ -2690,7 +2691,7 @@ impl SavantElite {
                     w_value,
                     interface_num as u16,
                     data,
-                    Duration::from_millis(500),
+                    Duration::from_millis(self.timeout_ms),
                 );
                 if result.is_ok() {
                     save_success = true;
@@ -4106,10 +4107,12 @@ impl SavantElite {
 
 fn main() -> Result<()> {
     let cli = Cli::parse();
-    let savant = SavantElite::new(cli.verbose, cli.json)?;
+    let timeout_ms = cli.timeout.unwrap_or(DEFAULT_USB_TIMEOUT_MS);
+    let savant = SavantElite::new(cli.verbose, cli.json, timeout_ms)?;
 
     if cli.verbose {
         eprintln!("[verbose] Verbose mode enabled");
+        eprintln!("[verbose] USB timeout: {}ms", timeout_ms);
     }
     if cli.json {
         savant.verbose("JSON output mode enabled");

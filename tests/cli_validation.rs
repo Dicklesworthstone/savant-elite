@@ -1001,3 +1001,77 @@ fn cli_doctor_help() {
         .success()
         .stdout(predicate::str::contains("diagnostics"));
 }
+
+// ============================================================================
+// Timeout Tests
+// ============================================================================
+
+#[test]
+fn cli_timeout_help_shows_default() {
+    savant()
+        .arg("--help")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("--timeout <MS>"))
+        .stdout(predicate::str::contains("500"));
+}
+
+#[test]
+fn cli_timeout_accepts_valid_value() {
+    savant()
+        .args(["--timeout", "1000", "status"])
+        .assert()
+        .success();
+}
+
+#[test]
+fn cli_timeout_accepts_minimum_value() {
+    savant()
+        .args(["--timeout", "100", "status"])
+        .assert()
+        .success();
+}
+
+#[test]
+fn cli_timeout_accepts_maximum_value() {
+    savant()
+        .args(["--timeout", "600000", "status"])
+        .assert()
+        .success();
+}
+
+#[test]
+fn cli_timeout_rejects_too_low() {
+    savant()
+        .args(["--timeout", "50", "status"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("50 is not in 100..=600000"));
+}
+
+#[test]
+fn cli_timeout_rejects_too_high() {
+    savant()
+        .args(["--timeout", "700000", "status"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("700000 is not in 100..=600000"));
+}
+
+#[test]
+fn cli_timeout_rejects_non_numeric() {
+    savant()
+        .args(["--timeout", "abc", "status"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("invalid value"));
+}
+
+#[test]
+fn cli_timeout_verbose_shows_value() {
+    savant()
+        .args(["--verbose", "--timeout", "5000", "status"])
+        .assert()
+        .success()
+        .stderr(predicate::str::contains("USB timeout: 5000ms"));
+}
