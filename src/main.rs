@@ -110,6 +110,58 @@ impl PedalConfig {
     }
 }
 
+// JSON output structures for --json flag
+#[derive(Serialize)]
+struct JsonDeviceInterface {
+    mode: String,
+    vid: String,
+    pid: String,
+    interface: i32,
+    usage_page: String,
+    usage: String,
+}
+
+#[derive(Serialize)]
+struct JsonConfig {
+    source: String,
+    path: String,
+    left: String,
+    middle: String,
+    right: String,
+}
+
+#[derive(Serialize)]
+struct JsonInfoOutput {
+    device: JsonDeviceInfo,
+    config: Option<JsonConfig>,
+}
+
+#[derive(Serialize)]
+struct JsonDeviceInfo {
+    detected: bool,
+    mode: Option<String>,
+    vid: String,
+    pid: Option<String>,
+    path: Option<String>,
+    serial: Option<String>,
+    interfaces: Vec<JsonDeviceInterface>,
+}
+
+#[derive(Serialize)]
+struct JsonStatusDevice {
+    mode: String,
+    pid: String,
+    location: String,
+}
+
+#[derive(Serialize)]
+struct JsonStatusOutput {
+    detected: bool,
+    mode: Option<String>,
+    devices: Vec<JsonStatusDevice>,
+    ready_to_program: bool,
+}
+
 const KINESIS_VID: u16 = 0x05F3;
 const SAVANT_ELITE_PID: u16 = 0x030C; // Normal "play" mode PID
 const PROGRAMMING_PID: u16 = 0x0232; // Programming mode PID (from driver INF)
@@ -442,6 +494,10 @@ struct Cli {
     #[arg(short, long, global = true)]
     verbose: bool,
 
+    /// Output in JSON format for scripting
+    #[arg(long, global = true)]
+    json: bool,
+
     #[command(subcommand)]
     command: Commands,
 }
@@ -588,6 +644,7 @@ impl KeyAction {
 struct SavantElite {
     console: Console,
     verbose: bool,
+    json_output: bool,
 }
 
 struct UsbInterfaceGuard<'a> {
@@ -622,10 +679,11 @@ fn is_device_still_connected(bus_number: u8, device_address: u8) -> bool {
 }
 
 impl SavantElite {
-    fn new(verbose: bool) -> Result<Self> {
+    fn new(verbose: bool, json_output: bool) -> Result<Self> {
         Ok(Self {
             console: Console::new(),
             verbose,
+            json_output,
         })
     }
 
@@ -785,8 +843,6 @@ impl SavantElite {
         let api = HidApi::new().context("Failed to initialize HID API")?;
         self.verbose("HID API initialized successfully");
 
-        self.print_banner();
-
         // (mode, vid, pid, path, serial, interface, usage_page, usage)
         type DeviceInfo = (String, String, String, String, String, i32, u16, u16);
         let mut found_any = false;
@@ -823,6 +879,79 @@ impl SavantElite {
                 ));
             }
         }
+
+        // Load config
+        self.verbose(&format!(
+            "Loading config from: {}",
+            PedalConfig::config_path().display()
+        ));
+        let config = PedalConfig::load();
+        if let Some(ref cfg) = config {
+            self.verbose(&format!(
+                "Config loaded: left={}, middle={}, right={}",
+                cfg.left, cfg.middle, cfg.right
+            ));
+        } else {
+            self.verbose("No saved config found");
+        }
+
+        // JSON output mode
+        if self.json_output {
+            let mut interfaces: Vec<JsonDeviceInterface> = Vec::new();
+            let mut seen_interfaces = std::collections::HashSet::new();
+
+            for (mode, vid, pid, _path, _serial, iface, usage_page, usage) in &devices_info {
+                if seen_interfaces.insert((*iface, *usage_page, *usage)) {
+                    interfaces.push(JsonDeviceInterface {
+                        mode: mode.to_lowercase(),
+                        vid: vid.clone(),
+                        pid: pid.clone(),
+                        interface: *iface,
+                        usage_page: format!("0x{:04X}", usage_page),
+                        usage: format!("0x{:04X}", usage),
+                    });
+                }
+            }
+
+            let (path, serial) = devices_info.first().map_or((None, None), |d| {
+                let serial = if d.4.is_empty() || d.4 == "N/A" {
+                    None
+                } else {
+                    Some(d.4.clone())
+                };
+                (Some(d.3.clone()), serial)
+            });
+
+            let mode = devices_info.first().map(|d| d.0.to_lowercase());
+            let pid = devices_info.first().map(|d| d.2.clone());
+
+            let json_config = config.map(|cfg| JsonConfig {
+                source: "file".to_string(),
+                path: PedalConfig::config_path().display().to_string(),
+                left: cfg.left,
+                middle: cfg.middle,
+                right: cfg.right,
+            });
+
+            let output = JsonInfoOutput {
+                device: JsonDeviceInfo {
+                    detected: found_any,
+                    mode,
+                    vid: format!("0x{:04X}", KINESIS_VID),
+                    pid,
+                    path,
+                    serial,
+                    interfaces,
+                },
+                config: json_config,
+            };
+
+            println!("{}", serde_json::to_string_pretty(&output)?);
+            return Ok(());
+        }
+
+        // Human-readable output
+        self.print_banner();
 
         if found_any {
             self.console.print(
@@ -881,18 +1010,9 @@ impl SavantElite {
             }
 
             // Show current pedal configuration from saved config
-            self.verbose(&format!(
-                "Loading config from: {}",
-                PedalConfig::config_path().display()
-            ));
-            if let Some(config) = PedalConfig::load() {
-                self.verbose(&format!(
-                    "Config loaded: left={}, middle={}, right={}",
-                    config.left, config.middle, config.right
-                ));
-                self.print_pedal_visualization(&config.left, &config.middle, &config.right);
+            if let Some(cfg) = config {
+                self.print_pedal_visualization(&cfg.left, &cfg.middle, &cfg.right);
             } else {
-                self.verbose("No saved config found");
                 self.console.print("");
                 self.console.print(
                     "[bold #f39c12]┌──────────────────────────────────────────────────────────┐[/]",
@@ -1074,19 +1194,6 @@ impl SavantElite {
     }
 
     fn status(&self) -> Result<()> {
-        self.print_banner();
-
-        self.console.print(
-            "[bold #1abc9c]┌─────────────────────────────────────────────────────────────────┐[/]",
-        );
-        self.console.print(
-            "[bold #1abc9c]│[/]  [bold #f39c12]🔍[/] [bold white]DEVICE STATUS CHECK[/]                                        [bold #1abc9c]│[/]",
-        );
-        self.console.print(
-            "[bold #1abc9c]└─────────────────────────────────────────────────────────────────┘[/]",
-        );
-        self.console.print("");
-
         // Check via libusb first (more reliable for programming mode)
         let mut found_play_usb = false;
         let mut found_program_usb = false;
@@ -1195,6 +1302,50 @@ impl SavantElite {
 
         let found_play = found_play_usb || found_play_hid;
         let found_program = found_program_usb || found_program_hid;
+
+        // JSON output mode
+        if self.json_output {
+            let mode = if found_program {
+                Some("program".to_string())
+            } else if found_play {
+                Some("play".to_string())
+            } else {
+                None
+            };
+
+            let devices: Vec<JsonStatusDevice> = device_details
+                .iter()
+                .map(|(m, pid, loc)| JsonStatusDevice {
+                    mode: m.to_lowercase(),
+                    pid: pid.clone(),
+                    location: loc.clone(),
+                })
+                .collect();
+
+            let output = JsonStatusOutput {
+                detected: found_play || found_program,
+                mode,
+                devices,
+                ready_to_program: found_program,
+            };
+
+            println!("{}", serde_json::to_string_pretty(&output)?);
+            return Ok(());
+        }
+
+        // Human-readable output
+        self.print_banner();
+
+        self.console.print(
+            "[bold #1abc9c]┌─────────────────────────────────────────────────────────────────┐[/]",
+        );
+        self.console.print(
+            "[bold #1abc9c]│[/]  [bold #f39c12]🔍[/] [bold white]DEVICE STATUS CHECK[/]                                        [bold #1abc9c]│[/]",
+        );
+        self.console.print(
+            "[bold #1abc9c]└─────────────────────────────────────────────────────────────────┘[/]",
+        );
+        self.console.print("");
 
         if !found_play && !found_program {
             self.console.print(
@@ -2668,10 +2819,13 @@ impl SavantElite {
 
 fn main() -> Result<()> {
     let cli = Cli::parse();
-    let savant = SavantElite::new(cli.verbose)?;
+    let savant = SavantElite::new(cli.verbose, cli.json)?;
 
     if cli.verbose {
         eprintln!("[verbose] Verbose mode enabled");
+    }
+    if cli.json {
+        savant.verbose("JSON output mode enabled");
     }
 
     match cli.command {

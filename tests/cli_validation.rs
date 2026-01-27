@@ -561,3 +561,88 @@ fn cli_verbose_with_dry_run() {
         .success()
         .stderr(predicate::str::contains("Parsing left pedal action"));
 }
+
+// ============================================================================
+// JSON Output Tests
+// ============================================================================
+
+#[test]
+fn cli_json_flag_accepted() {
+    // --json flag should be accepted on info command
+    // This will fail because no device, but we check JSON output structure
+    let result = savant().args(["--json", "info"]).assert();
+    let output = result.get_output();
+    let stdout = String::from_utf8_lossy(&output.stdout);
+
+    // Should output valid JSON (even if device not found)
+    let json: serde_json::Value =
+        serde_json::from_str(&stdout).expect("info --json should produce valid JSON");
+    assert!(json.get("device").is_some(), "JSON should have device field");
+}
+
+#[test]
+fn cli_json_info_has_correct_structure() {
+    let output = savant()
+        .args(["--json", "info"])
+        .assert()
+        .get_output()
+        .stdout
+        .clone();
+
+    let json: serde_json::Value =
+        serde_json::from_slice(&output).expect("info --json should produce valid JSON");
+
+    // Check device structure
+    let device = json.get("device").expect("should have device field");
+    assert!(
+        device.get("detected").is_some(),
+        "device should have detected field"
+    );
+    assert!(device.get("vid").is_some(), "device should have vid field");
+    assert!(
+        device.get("interfaces").is_some(),
+        "device should have interfaces field"
+    );
+}
+
+#[test]
+fn cli_json_status_produces_valid_json() {
+    let result = savant().args(["--json", "status"]).assert();
+    let output = result.get_output();
+    let stdout = String::from_utf8_lossy(&output.stdout);
+
+    let json: serde_json::Value =
+        serde_json::from_str(&stdout).expect("status --json should produce valid JSON");
+    assert!(
+        json.get("detected").is_some(),
+        "JSON should have detected field"
+    );
+    assert!(
+        json.get("ready_to_program").is_some(),
+        "JSON should have ready_to_program field"
+    );
+    assert!(
+        json.get("devices").is_some(),
+        "JSON should have devices field"
+    );
+}
+
+#[test]
+fn cli_json_output_goes_to_stdout() {
+    // JSON output should go to stdout, not stderr
+    savant()
+        .args(["--json", "info"])
+        .assert()
+        .stdout(predicate::str::contains("\"device\""))
+        .stderr(predicate::str::contains("\"device\"").not());
+}
+
+#[test]
+fn cli_json_with_verbose() {
+    // JSON and verbose should work together
+    savant()
+        .args(["--json", "-v", "info"])
+        .assert()
+        .stdout(predicate::str::contains("\"device\""))
+        .stderr(predicate::str::contains("[verbose]"));
+}
