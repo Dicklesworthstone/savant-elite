@@ -5,6 +5,7 @@ use rich_rust::markup;
 use rich_rust::prelude::*;
 use rich_rust::r#box::ROUNDED;
 use rusb::{Device, GlobalContext};
+use serde::Serialize;
 use std::fs;
 use std::path::PathBuf;
 use std::time::Duration;
@@ -494,6 +495,13 @@ enum Commands {
         /// Interface number (0=keyboard, 1=mouse)
         #[arg(long, default_value = "0", value_parser = clap::value_parser!(i32).range(0..=255))]
         interface: i32,
+    },
+
+    /// List all valid key names and modifiers
+    Keys {
+        /// Output in JSON format for scripting
+        #[arg(long)]
+        json: bool,
     },
 }
 
@@ -2362,6 +2370,209 @@ impl SavantElite {
 
         Ok(())
     }
+
+    /// List all valid key names and modifiers
+    fn list_keys(&self, json_output: bool) -> Result<()> {
+        // Data structures for key information
+        #[derive(Serialize)]
+        struct ModifierInfo {
+            names: Vec<&'static str>,
+            symbol: &'static str,
+            description: &'static str,
+        }
+
+        #[derive(Serialize)]
+        struct KeysOutput {
+            modifiers: Vec<ModifierInfo>,
+            keys: KeyCategories,
+        }
+
+        #[derive(Serialize)]
+        struct KeyCategories {
+            letters: Vec<&'static str>,
+            numbers: Vec<&'static str>,
+            function_keys: Vec<&'static str>,
+            special: Vec<KeyAliases>,
+            arrow_keys: Vec<&'static str>,
+            punctuation: Vec<KeyAliases>,
+        }
+
+        #[derive(Serialize)]
+        struct KeyAliases {
+            names: Vec<&'static str>,
+        }
+
+        let modifiers = vec![
+            ModifierInfo {
+                names: vec!["cmd", "command", "gui", "meta", "super"],
+                symbol: "⌘",
+                description: "Command/GUI",
+            },
+            ModifierInfo {
+                names: vec!["ctrl", "control"],
+                symbol: "⌃",
+                description: "Control",
+            },
+            ModifierInfo {
+                names: vec!["alt", "option", "opt"],
+                symbol: "⌥",
+                description: "Option/Alt",
+            },
+            ModifierInfo {
+                names: vec!["shift"],
+                symbol: "⇧",
+                description: "Shift",
+            },
+        ];
+
+        let letters: Vec<&'static str> = vec![
+            "a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m", "n", "o", "p", "q",
+            "r", "s", "t", "u", "v", "w", "x", "y", "z",
+        ];
+
+        let numbers: Vec<&'static str> = vec!["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"];
+
+        let function_keys: Vec<&'static str> = vec![
+            "f1", "f2", "f3", "f4", "f5", "f6", "f7", "f8", "f9", "f10", "f11", "f12",
+        ];
+
+        let special = vec![
+            KeyAliases {
+                names: vec!["enter", "return"],
+            },
+            KeyAliases {
+                names: vec!["esc", "escape"],
+            },
+            KeyAliases {
+                names: vec!["backspace"],
+            },
+            KeyAliases { names: vec!["tab"] },
+            KeyAliases {
+                names: vec!["space"],
+            },
+            KeyAliases {
+                names: vec!["capslock"],
+            },
+        ];
+
+        let arrow_keys: Vec<&'static str> = vec!["up", "down", "left", "right"];
+
+        let punctuation = vec![
+            KeyAliases {
+                names: vec!["minus", "-"],
+            },
+            KeyAliases {
+                names: vec!["equal", "="],
+            },
+            KeyAliases {
+                names: vec!["leftbracket", "["],
+            },
+            KeyAliases {
+                names: vec!["rightbracket", "]"],
+            },
+            KeyAliases {
+                names: vec!["backslash", "\\"],
+            },
+            KeyAliases {
+                names: vec!["semicolon", ";"],
+            },
+            KeyAliases {
+                names: vec!["quote", "'"],
+            },
+            KeyAliases {
+                names: vec!["grave", "`"],
+            },
+            KeyAliases {
+                names: vec!["comma", ","],
+            },
+            KeyAliases {
+                names: vec!["period", "."],
+            },
+            KeyAliases {
+                names: vec!["slash", "/"],
+            },
+        ];
+
+        if json_output {
+            let output = KeysOutput {
+                modifiers,
+                keys: KeyCategories {
+                    letters,
+                    numbers,
+                    function_keys,
+                    special,
+                    arrow_keys,
+                    punctuation,
+                },
+            };
+            println!("{}", serde_json::to_string_pretty(&output)?);
+        } else {
+            // Human-readable output
+            self.console
+                .print("[bold cyan]MODIFIERS[/] [dim](combine with + before key)[/]");
+            self.console.print("");
+            for m in &modifiers {
+                let names = m.names.join(", ");
+                self.console.print(&format!(
+                    "  [green]{}[/]  →  {} {}",
+                    names, m.symbol, m.description
+                ));
+            }
+
+            self.console.print("");
+            self.console.print("[bold cyan]LETTERS[/]");
+            self.console
+                .print(&format!("  [green]{}[/]", letters.join(" ")));
+
+            self.console.print("");
+            self.console.print("[bold cyan]NUMBERS[/]");
+            self.console
+                .print(&format!("  [green]{}[/]", numbers.join(" ")));
+
+            self.console.print("");
+            self.console.print("[bold cyan]FUNCTION KEYS[/]");
+            self.console
+                .print(&format!("  [green]{}[/]", function_keys.join(" ")));
+
+            self.console.print("");
+            self.console.print("[bold cyan]SPECIAL KEYS[/]");
+            for k in &special {
+                self.console
+                    .print(&format!("  [green]{}[/]", k.names.join(", ")));
+            }
+
+            self.console.print("");
+            self.console.print("[bold cyan]ARROW KEYS[/]");
+            self.console
+                .print(&format!("  [green]{}[/]", arrow_keys.join("  ")));
+
+            self.console.print("");
+            self.console.print("[bold cyan]PUNCTUATION[/]");
+            for k in &punctuation {
+                // Avoid markup interpretation issues with backslash
+                let display = k.names.join(", ");
+                if display.contains('\\') {
+                    // Print without markup for backslash
+                    println!("  {}", display);
+                } else {
+                    self.console.print(&format!("  [green]{}[/]", display));
+                }
+            }
+
+            self.console.print("");
+            self.console.print("[bold cyan]EXAMPLES[/]");
+            self.console.print("  [dim]Copy/Paste workflow:[/]");
+            self.console
+                .print("  [yellow]savant program --left cmd+c --middle cmd+a --right cmd+v[/]");
+            self.console.print("");
+            self.console.print("  [dim]Multi-modifier combo:[/]");
+            self.console.print(
+                "  [yellow]savant program --left ctrl+shift+f1 --middle f5 --right enter[/]",
+            );
+        }
+
+        Ok(())
+    }
 }
 
 fn main() -> Result<()> {
@@ -2396,6 +2607,9 @@ fn main() -> Result<()> {
             monitor,
         } => {
             savant.program(&left, &middle, &right, dry_run, monitor)?;
+        }
+        Commands::Keys { json } => {
+            savant.list_keys(json)?;
         }
     }
 

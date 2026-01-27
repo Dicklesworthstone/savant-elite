@@ -394,3 +394,67 @@ fn cli_requires_subcommand() {
         .failure()
         .stderr(predicate::str::contains("Usage").or(predicate::str::contains("subcommand")));
 }
+
+// ============================================================================
+// Keys Command Tests
+// ============================================================================
+
+#[test]
+fn cli_keys_shows_modifiers() {
+    savant()
+        .arg("keys")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("MODIFIERS"))
+        .stdout(predicate::str::contains("cmd"))
+        .stdout(predicate::str::contains("ctrl"))
+        .stdout(predicate::str::contains("shift"))
+        .stdout(predicate::str::contains("alt"));
+}
+
+#[test]
+fn cli_keys_shows_all_categories() {
+    savant()
+        .arg("keys")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("LETTERS"))
+        .stdout(predicate::str::contains("NUMBERS"))
+        .stdout(predicate::str::contains("FUNCTION KEYS"))
+        .stdout(predicate::str::contains("SPECIAL KEYS"))
+        .stdout(predicate::str::contains("ARROW KEYS"))
+        .stdout(predicate::str::contains("PUNCTUATION"))
+        .stdout(predicate::str::contains("EXAMPLES"));
+}
+
+#[test]
+fn cli_keys_json_is_valid() {
+    let output = savant()
+        .args(["keys", "--json"])
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+
+    // Verify it's valid JSON by parsing it
+    let json: serde_json::Value =
+        serde_json::from_slice(&output).expect("keys --json should produce valid JSON");
+
+    // Verify structure
+    assert!(
+        json.get("modifiers").is_some(),
+        "JSON should have modifiers"
+    );
+    assert!(json.get("keys").is_some(), "JSON should have keys");
+}
+
+#[test]
+fn cli_keys_help() {
+    savant()
+        .args(["keys", "--help"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("--json"))
+        .stdout(predicate::str::contains("List all valid key names"));
+}
