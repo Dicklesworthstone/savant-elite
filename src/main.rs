@@ -1904,7 +1904,7 @@ impl SavantElite {
                 w_value,
                 interface_num as u16,
                 &mut response,
-                Duration::from_millis(200),
+                Duration::from_millis(self.timeout_ms),
             );
 
             if let Ok(len) = result {
