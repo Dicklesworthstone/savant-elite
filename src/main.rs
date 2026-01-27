@@ -242,6 +242,71 @@ struct JsonPresetListOutput {
     presets: Vec<JsonPreset>,
 }
 
+// JSON output for config profiles
+#[derive(Serialize)]
+struct JsonProfile {
+    name: String,
+    left: String,
+    middle: String,
+    right: String,
+}
+
+#[derive(Serialize)]
+struct JsonProfileListOutput {
+    profiles: Vec<JsonProfile>,
+    profiles_dir: String,
+}
+
+#[derive(Serialize)]
+struct JsonProfileSaveOutput {
+    success: bool,
+    name: String,
+    path: String,
+}
+
+#[derive(Serialize)]
+struct JsonProfileDeleteOutput {
+    success: bool,
+    name: String,
+    path: String,
+}
+
+/// Get the profiles directory path
+fn profiles_dir() -> PathBuf {
+    dirs::config_dir()
+        .unwrap_or_else(|| PathBuf::from("."))
+        .join("savant-elite")
+        .join("profiles")
+}
+
+/// Get the path for a specific profile
+fn profile_path(name: &str) -> PathBuf {
+    profiles_dir().join(format!("{}.conf", name))
+}
+
+/// Validate profile name (alphanumeric, hyphen, underscore only)
+fn validate_profile_name(name: &str) -> Result<()> {
+    if name.is_empty() {
+        return Err(anyhow!("Profile name cannot be empty"));
+    }
+    if name.len() > 64 {
+        return Err(anyhow!("Profile name too long (max 64 characters)"));
+    }
+    if !name
+        .chars()
+        .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
+    {
+        return Err(anyhow!(
+            "Profile name can only contain letters, numbers, hyphens, and underscores"
+        ));
+    }
+    // Prevent names that could cause issues
+    if name.starts_with('-') || name.starts_with('_') {
+        return Err(anyhow!("Profile name cannot start with a hyphen or underscore"));
+    }
+    Ok(())
+}
+
 const KINESIS_VID: u16 = 0x05F3;
 const SAVANT_ELITE_PID: u16 = 0x030C; // Normal "play" mode PID
 const PROGRAMMING_PID: u16 = 0x0232; // Programming mode PID (from driver INF)
@@ -669,6 +734,55 @@ enum Commands {
         /// Dry run - show what would be programmed without writing to device
         #[arg(long)]
         dry_run: bool,
+    },
+
+    /// Manage saved pedal configuration profiles
+    Config {
+        #[command(subcommand)]
+        command: ConfigCommand,
+    },
+}
+
+/// Subcommands for the config command
+#[derive(Subcommand)]
+enum ConfigCommand {
+    /// Save current configuration as a named profile
+    Save {
+        /// Name for the profile (alphanumeric, hyphens, underscores)
+        name: String,
+
+        /// Overwrite existing profile without prompting
+        #[arg(long, short = 'f')]
+        force: bool,
+    },
+
+    /// Load and apply a saved profile (programs device)
+    Load {
+        /// Name of the profile to load
+        name: String,
+
+        /// Preview without programming device
+        #[arg(long)]
+        dry_run: bool,
+    },
+
+    /// List all saved profiles
+    List,
+
+    /// Show contents of a saved profile
+    Show {
+        /// Name of the profile to show
+        name: String,
+    },
+
+    /// Delete a saved profile
+    Delete {
+        /// Name of the profile to delete
+        name: String,
+
+        /// Delete without confirmation
+        #[arg(long, short = 'f')]
+        force: bool,
     },
 }
 
@@ -3094,6 +3208,366 @@ impl SavantElite {
 
         Ok(())
     }
+
+    // =========================================================================
+    // Config Profile Commands
+    // =========================================================================
+
+    fn config(&self, command: ConfigCommand) -> Result<()> {
+        match command {
+            ConfigCommand::Save { name, force } => self.config_save(&name, force),
+            ConfigCommand::Load { name, dry_run } => self.config_load(&name, dry_run),
+            ConfigCommand::List => self.config_list(),
+            ConfigCommand::Show { name } => self.config_show(&name),
+            ConfigCommand::Delete { name, force } => self.config_delete(&name, force),
+        }
+    }
+
+    fn config_save(&self, name: &str, force: bool) -> Result<()> {
+        // Validate profile name
+        validate_profile_name(name)?;
+
+        self.verbose(&format!("Saving profile: {}", name));
+
+        // Check if current config exists
+        let current_config = PedalConfig::load();
+        let Some(config) = current_config else {
+            if self.json_output {
+                let err = serde_json::json!({
+                    "error": "no_current_config",
+                    "message": "No current configuration to save. Run 'savant program' first."
+                });
+                println!("{}", serde_json::to_string_pretty(&err)?);
+            } else {
+                self.console.print("[bold red]Error:[/] No current configuration to save.");
+                self.console.print("");
+                self.console
+                    .print("Run [bold yellow]savant program[/] first to create a configuration.");
+            }
+            return Err(anyhow!("No current configuration to save"));
+        };
+
+        let path = profile_path(name);
+
+        // Check if profile already exists
+        if path.exists() && !force {
+            if self.json_output {
+                let err = serde_json::json!({
+                    "error": "profile_exists",
+                    "message": format!("Profile '{}' already exists. Use --force to overwrite.", name),
+                    "path": path.display().to_string()
+                });
+                println!("{}", serde_json::to_string_pretty(&err)?);
+            } else {
+                self.console.print(&format!(
+                    "[bold red]Error:[/] Profile '{}' already exists.",
+                    name
+                ));
+                self.console.print("");
+                self.console.print(&format!(
+                    "Use [bold yellow]savant config save {} --force[/] to overwrite.",
+                    name
+                ));
+            }
+            return Err(anyhow!("Profile '{}' already exists", name));
+        }
+
+        // Create profiles directory if needed
+        let dir = profiles_dir();
+        if !dir.exists() {
+            self.verbose(&format!("Creating profiles directory: {}", dir.display()));
+            fs::create_dir_all(&dir).context("Failed to create profiles directory")?;
+        }
+
+        // Save the profile
+        config.save_to(&path).context("Failed to save profile")?;
+
+        if self.json_output {
+            let output = JsonProfileSaveOutput {
+                success: true,
+                name: name.to_string(),
+                path: path.display().to_string(),
+            };
+            println!("{}", serde_json::to_string_pretty(&output)?);
+        } else {
+            self.console.print(&format!(
+                "[bold #2ecc71]✓[/] Saved profile '[bold yellow]{}[/]'",
+                name
+            ));
+            self.console.print(&format!(
+                "  Path: [dim]{}[/]",
+                path.display()
+            ));
+            self.console.print("");
+            self.console.print(&format!(
+                "To load: [bold yellow]savant config load {}[/]",
+                name
+            ));
+        }
+
+        Ok(())
+    }
+
+    fn config_load(&self, name: &str, dry_run: bool) -> Result<()> {
+        // Validate profile name
+        validate_profile_name(name)?;
+
+        self.verbose(&format!("Loading profile: {}", name));
+
+        let path = profile_path(name);
+
+        // Check if profile exists
+        if !path.exists() {
+            if self.json_output {
+                let err = serde_json::json!({
+                    "error": "profile_not_found",
+                    "message": format!("Profile '{}' not found.", name),
+                    "path": path.display().to_string()
+                });
+                println!("{}", serde_json::to_string_pretty(&err)?);
+            } else {
+                self.console.print(&format!(
+                    "[bold red]Error:[/] Profile '{}' not found.",
+                    name
+                ));
+                self.console.print("");
+                self.console
+                    .print("Run [bold yellow]savant config list[/] to see available profiles.");
+            }
+            return Err(anyhow!("Profile '{}' not found", name));
+        }
+
+        // Load the profile
+        let config = PedalConfig::load_from(&path)
+            .ok_or_else(|| anyhow!("Failed to parse profile '{}'", name))?;
+
+        self.verbose(&format!(
+            "Profile contents: left={}, middle={}, right={}",
+            config.left, config.middle, config.right
+        ));
+
+        // Program the device using the profile's configuration
+        self.program(&config.left, &config.middle, &config.right, dry_run, false)
+    }
+
+    fn config_list(&self) -> Result<()> {
+        self.verbose("Listing profiles");
+
+        let dir = profiles_dir();
+
+        // Collect profiles
+        let mut profiles: Vec<(String, PedalConfig)> = Vec::new();
+
+        if dir.exists() {
+            for entry in fs::read_dir(&dir).context("Failed to read profiles directory")? {
+                let entry = entry?;
+                let path = entry.path();
+                if path.extension().is_some_and(|ext| ext == "conf") {
+                    if let Some(name) = path.file_stem().and_then(|s| s.to_str()) {
+                        if let Some(config) = PedalConfig::load_from(&path) {
+                            profiles.push((name.to_string(), config));
+                        }
+                    }
+                }
+            }
+        }
+
+        // Sort by name
+        profiles.sort_by(|a, b| a.0.cmp(&b.0));
+
+        if self.json_output {
+            let output = JsonProfileListOutput {
+                profiles: profiles
+                    .iter()
+                    .map(|(name, config)| JsonProfile {
+                        name: name.clone(),
+                        left: config.left.clone(),
+                        middle: config.middle.clone(),
+                        right: config.right.clone(),
+                    })
+                    .collect(),
+                profiles_dir: dir.display().to_string(),
+            };
+            println!("{}", serde_json::to_string_pretty(&output)?);
+            return Ok(());
+        }
+
+        self.print_banner();
+
+        self.console.print(
+            "[bold #3498db]┌─────────────────────────────────────────────────────────────────┐[/]",
+        );
+        self.console.print(
+            "[bold #3498db]│[/]  [bold white]SAVED PROFILES[/]                                              [bold #3498db]│[/]",
+        );
+        self.console.print(
+            "[bold #3498db]└─────────────────────────────────────────────────────────────────┘[/]",
+        );
+        self.console.print("");
+
+        if profiles.is_empty() {
+            self.console.print("  [dim]No saved profiles yet.[/]");
+            self.console.print("");
+            self.console
+                .print("  Create one with: [bold yellow]savant config save <name>[/]");
+        } else {
+            for (name, config) in &profiles {
+                self.console.print(&format!(
+                    "  [bold yellow]{}[/]",
+                    name
+                ));
+                self.console.print(&format!(
+                    "    Left: [cyan]{}[/]  Middle: [cyan]{}[/]  Right: [cyan]{}[/]",
+                    config.left, config.middle, config.right
+                ));
+                self.console.print("");
+            }
+        }
+
+        self.console.print(&format!(
+            "[dim]Profiles directory: {}[/]",
+            dir.display()
+        ));
+
+        Ok(())
+    }
+
+    fn config_show(&self, name: &str) -> Result<()> {
+        // Validate profile name
+        validate_profile_name(name)?;
+
+        self.verbose(&format!("Showing profile: {}", name));
+
+        let path = profile_path(name);
+
+        // Check if profile exists
+        if !path.exists() {
+            if self.json_output {
+                let err = serde_json::json!({
+                    "error": "profile_not_found",
+                    "message": format!("Profile '{}' not found.", name),
+                    "path": path.display().to_string()
+                });
+                println!("{}", serde_json::to_string_pretty(&err)?);
+            } else {
+                self.console.print(&format!(
+                    "[bold red]Error:[/] Profile '{}' not found.",
+                    name
+                ));
+                self.console.print("");
+                self.console
+                    .print("Run [bold yellow]savant config list[/] to see available profiles.");
+            }
+            return Err(anyhow!("Profile '{}' not found", name));
+        }
+
+        // Load the profile
+        let config = PedalConfig::load_from(&path)
+            .ok_or_else(|| anyhow!("Failed to parse profile '{}'", name))?;
+
+        if self.json_output {
+            let output = JsonProfile {
+                name: name.to_string(),
+                left: config.left.clone(),
+                middle: config.middle.clone(),
+                right: config.right.clone(),
+            };
+            println!("{}", serde_json::to_string_pretty(&output)?);
+            return Ok(());
+        }
+
+        self.print_banner();
+
+        self.console.print(
+            "[bold #9b59b6]┌─────────────────────────────────────────────────────────────────┐[/]",
+        );
+        self.console.print(&format!(
+            "[bold #9b59b6]│[/]  [bold white]PROFILE: {}[/]{}[bold #9b59b6]│[/]",
+            name.to_uppercase(),
+            " ".repeat(55_usize.saturating_sub(name.len()))
+        ));
+        self.console.print(
+            "[bold #9b59b6]└─────────────────────────────────────────────────────────────────┘[/]",
+        );
+        self.console.print("");
+
+        // Show the pedal visualization
+        self.print_pedal_visualization(&config.left, &config.middle, &config.right);
+
+        self.console.print("");
+        self.console.print(&format!(
+            "To load: [bold yellow]savant config load {}[/]",
+            name
+        ));
+        self.console.print(&format!(
+            "Preview: [bold yellow]savant config load {} --dry-run[/]",
+            name
+        ));
+
+        Ok(())
+    }
+
+    fn config_delete(&self, name: &str, force: bool) -> Result<()> {
+        // Validate profile name
+        validate_profile_name(name)?;
+
+        self.verbose(&format!("Deleting profile: {}", name));
+
+        let path = profile_path(name);
+
+        // Check if profile exists
+        if !path.exists() {
+            if self.json_output {
+                let err = serde_json::json!({
+                    "error": "profile_not_found",
+                    "message": format!("Profile '{}' not found.", name),
+                    "path": path.display().to_string()
+                });
+                println!("{}", serde_json::to_string_pretty(&err)?);
+            } else {
+                self.console.print(&format!(
+                    "[bold red]Error:[/] Profile '{}' not found.",
+                    name
+                ));
+            }
+            return Err(anyhow!("Profile '{}' not found", name));
+        }
+
+        // In JSON mode or with --force, just delete
+        // Without --force in interactive mode, we'd ideally prompt - but CLI tools
+        // typically use --force for this. We'll just require --force for safety.
+        if !force && !self.json_output {
+            self.console.print(&format!(
+                "[bold #f39c12]Warning:[/] About to delete profile '[bold yellow]{}[/]'",
+                name
+            ));
+            self.console.print("");
+            self.console.print(&format!(
+                "Use [bold yellow]savant config delete {} --force[/] to confirm.",
+                name
+            ));
+            return Ok(());
+        }
+
+        // Delete the profile
+        fs::remove_file(&path).context("Failed to delete profile")?;
+
+        if self.json_output {
+            let output = JsonProfileDeleteOutput {
+                success: true,
+                name: name.to_string(),
+                path: path.display().to_string(),
+            };
+            println!("{}", serde_json::to_string_pretty(&output)?);
+        } else {
+            self.console.print(&format!(
+                "[bold #2ecc71]✓[/] Deleted profile '[bold yellow]{}[/]'",
+                name
+            ));
+        }
+
+        Ok(())
+    }
 }
 
 fn main() -> Result<()> {
@@ -3151,6 +3625,9 @@ fn main() -> Result<()> {
             dry_run,
         } => {
             savant.preset(name.as_deref(), list, show, dry_run)?;
+        }
+        Commands::Config { command } => {
+            savant.config(command)?;
         }
     }
 
