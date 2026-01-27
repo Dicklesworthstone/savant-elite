@@ -3913,11 +3913,10 @@ impl SavantElite {
                 if let Some(line) = error.line {
                     msg.push_str(&format!("Line {}: ", line));
                 }
-                if let Some(ref field) = error.field {
-                    msg.push_str(&format!("{}=", field));
-                }
-                if let Some(ref value) = error.value {
-                    msg.push_str(value);
+                // Only show "field=value" when we have both field and value
+                // For missing field errors, the error message already explains what's missing
+                if let (Some(ref field), Some(ref value)) = (&error.field, &error.value) {
+                    msg.push_str(&format!("{}={}", field, value));
                 }
                 if !msg.is_empty() {
                     self.console.print(&format!("  [dim]{}[/]", msg));
