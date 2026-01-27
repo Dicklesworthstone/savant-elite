@@ -1179,3 +1179,86 @@ fn cli_config_check_verbose() {
         .assert()
         .stderr(predicate::str::contains("Checking config file"));
 }
+
+// ============================================================================
+// Config History and Restore Tests
+// ============================================================================
+
+#[test]
+fn cli_config_history_shows_help() {
+    savant()
+        .args(["config", "history", "--help"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("automatic backups"));
+}
+
+#[test]
+fn cli_config_history_runs() {
+    savant()
+        .args(["config", "history"])
+        .assert()
+        .success();
+}
+
+#[test]
+fn cli_config_history_json_output() {
+    let output = savant()
+        .args(["--json", "config", "history"])
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+
+    let json: serde_json::Value = serde_json::from_slice(&output).unwrap();
+    assert!(json.get("history").is_some());
+    assert!(json.get("count").is_some());
+    assert!(json.get("history_dir").is_some());
+}
+
+#[test]
+fn cli_config_history_verbose() {
+    savant()
+        .args(["--verbose", "config", "history"])
+        .assert()
+        .success()
+        .stderr(predicate::str::contains("Listing config history"));
+}
+
+#[test]
+fn cli_config_restore_shows_help() {
+    savant()
+        .args(["config", "restore", "--help"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Backup number"))
+        .stdout(predicate::str::contains("--apply"));
+}
+
+#[test]
+fn cli_config_restore_requires_number() {
+    savant()
+        .args(["config", "restore"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("NUMBER"));
+}
+
+#[test]
+fn cli_config_restore_rejects_zero() {
+    savant()
+        .args(["config", "restore", "0"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("Invalid backup number"));
+}
+
+#[test]
+fn cli_config_restore_rejects_out_of_range() {
+    savant()
+        .args(["config", "restore", "9999"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("Invalid backup number"));
+}

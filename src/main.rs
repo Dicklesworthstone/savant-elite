@@ -106,7 +106,120 @@ impl PedalConfig {
     }
 
     fn save(&self) -> Result<()> {
+        // Backup current config before overwriting (if it exists)
+        Self::backup_current_config();
         self.save_to(&Self::config_path())
+    }
+
+    /// Get the history directory path for config backups
+    fn history_dir() -> PathBuf {
+        let config_dir = dirs::config_dir()
+            .unwrap_or_else(|| PathBuf::from("."))
+            .join("savant-elite");
+        config_dir.join("history")
+    }
+
+    /// Backup current config to history directory with timestamp
+    fn backup_current_config() {
+        let config_path = Self::config_path();
+        if !config_path.exists() {
+            return; // Nothing to backup
+        }
+
+        let history_dir = Self::history_dir();
+        if fs::create_dir_all(&history_dir).is_err() {
+            return; // Can't create history dir, skip backup silently
+        }
+
+        // Generate timestamp-based filename
+        let now = chrono::Local::now();
+        let backup_name = format!("{}.conf", now.format("%Y-%m-%d_%H%M%S"));
+        let backup_path = history_dir.join(&backup_name);
+
+        // Copy current config to backup
+        if fs::copy(&config_path, &backup_path).is_ok() {
+            // Prune old backups after successful backup
+            Self::prune_old_backups();
+        }
+    }
+
+    /// Keep only the most recent N backups (default 10)
+    fn prune_old_backups() {
+        let max_backups: usize = std::env::var("SAVANT_HISTORY_SIZE")
+            .ok()
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(10);
+
+        let history_dir = Self::history_dir();
+        if !history_dir.exists() {
+            return;
+        }
+
+        // Collect backup files
+        let mut backups: Vec<PathBuf> = fs::read_dir(&history_dir)
+            .into_iter()
+            .flatten()
+            .filter_map(|e| e.ok())
+            .map(|e| e.path())
+            .filter(|p| p.extension().is_some_and(|ext| ext == "conf"))
+            .collect();
+
+        // Sort by filename (timestamp format ensures chronological order)
+        backups.sort();
+
+        // Remove oldest backups if we have too many
+        if backups.len() > max_backups {
+            let to_remove = backups.len() - max_backups;
+            for backup in backups.iter().take(to_remove) {
+                let _ = fs::remove_file(backup);
+            }
+        }
+    }
+
+    /// List all backup files with timestamps and config summaries
+    fn list_backups() -> Vec<(PathBuf, chrono::NaiveDateTime, Option<Self>)> {
+        let history_dir = Self::history_dir();
+        if !history_dir.exists() {
+            return Vec::new();
+        }
+
+        let mut backups: Vec<(PathBuf, chrono::NaiveDateTime, Option<Self>)> = fs::read_dir(&history_dir)
+            .into_iter()
+            .flatten()
+            .filter_map(|e| e.ok())
+            .map(|e| e.path())
+            .filter(|p| p.extension().is_some_and(|ext| ext == "conf"))
+            .filter_map(|path| {
+                // Parse timestamp from filename (YYYY-MM-DD_HHMMSS.conf)
+                let stem = path.file_stem()?.to_str()?;
+                let datetime = chrono::NaiveDateTime::parse_from_str(stem, "%Y-%m-%d_%H%M%S").ok()?;
+                let config = Self::load_from(&path);
+                Some((path, datetime, config))
+            })
+            .collect();
+
+        // Sort by timestamp, newest first
+        backups.sort_by(|a, b| b.1.cmp(&a.1));
+        backups
+    }
+
+    /// Restore a backup by index (1 = most recent)
+    fn restore_backup(index: usize) -> Result<Self> {
+        let backups = Self::list_backups();
+
+        if index == 0 || index > backups.len() {
+            return Err(anyhow!(
+                "Invalid backup number {}. Valid range: 1-{}",
+                index,
+                backups.len()
+            ));
+        }
+
+        let (path, _, config) = &backups[index - 1];
+
+        config.clone().ok_or_else(|| {
+            anyhow!("Failed to parse backup file: {}", path.display())
+        })
     }
 }
 
@@ -857,6 +970,19 @@ enum ConfigCommand {
         /// Path to config file (defaults to current config)
         #[arg(value_name = "FILE")]
         file: Option<String>,
+    },
+
+    /// Show configuration history (automatic backups)
+    History,
+
+    /// Restore a previous configuration from history
+    Restore {
+        /// Backup number to restore (1 = most recent)
+        number: usize,
+
+        /// Program device immediately after restore
+        #[arg(long)]
+        apply: bool,
     },
 }
 
@@ -3292,6 +3418,8 @@ impl SavantElite {
             ConfigCommand::Show { name } => self.config_show(&name),
             ConfigCommand::Delete { name, force } => self.config_delete(&name, force),
             ConfigCommand::Check { file } => self.config_check(file.as_deref()),
+            ConfigCommand::History => self.config_history(),
+            ConfigCommand::Restore { number, apply } => self.config_restore(number, apply),
         }
     }
 
@@ -3939,6 +4067,124 @@ impl SavantElite {
             Ok(())
         } else {
             Err(anyhow!("Configuration has {} error(s)", error_count))
+        }
+    }
+
+    fn config_history(&self) -> Result<()> {
+        self.verbose("Listing config history");
+
+        let backups = PedalConfig::list_backups();
+
+        if self.json_output {
+            let history: Vec<serde_json::Value> = backups
+                .iter()
+                .enumerate()
+                .map(|(i, (path, datetime, config))| {
+                    let mut entry = serde_json::json!({
+                        "number": i + 1,
+                        "timestamp": datetime.format("%Y-%m-%d %H:%M:%S").to_string(),
+                        "path": path.display().to_string(),
+                    });
+                    if let Some(cfg) = config {
+                        entry["left"] = serde_json::json!(cfg.left);
+                        entry["middle"] = serde_json::json!(cfg.middle);
+                        entry["right"] = serde_json::json!(cfg.right);
+                    }
+                    entry
+                })
+                .collect();
+
+            let output = serde_json::json!({
+                "history": history,
+                "count": backups.len(),
+                "history_dir": PedalConfig::history_dir().display().to_string(),
+            });
+            println!("{}", serde_json::to_string_pretty(&output)?);
+            return Ok(());
+        }
+
+        if backups.is_empty() {
+            self.console.print("[bold yellow]No configuration history found.[/]");
+            self.console.print("");
+            self.console.print("[dim]History is created automatically when you program the device[/]");
+            self.console.print("[dim]or load a profile. Each change creates a backup.[/]");
+            return Ok(());
+        }
+
+        self.console.print("[bold #3498db]CONFIG HISTORY[/] [dim](most recent first)[/]");
+        self.console.print("");
+
+        for (i, (_path, datetime, config)) in backups.iter().enumerate() {
+            let num = format!("{:>3}.", i + 1);
+            let timestamp = datetime.format("%Y-%m-%d %H:%M:%S").to_string();
+
+            let summary = if let Some(cfg) = config {
+                format!("{}, {}, {}", cfg.left, cfg.middle, cfg.right)
+            } else {
+                "[dim]<unable to parse>[/]".to_string()
+            };
+
+            self.console.print(&format!(
+                "  [bold #3498db]{}[/]  [#95a5a6]{}[/]  {}",
+                num, timestamp, summary
+            ));
+        }
+
+        self.console.print("");
+        self.console.print("[dim]Use 'savant config restore <N>' to restore a previous config.[/]");
+        self.console.print("[dim]Use 'savant config restore <N> --apply' to restore and program device.[/]");
+
+        Ok(())
+    }
+
+    fn config_restore(&self, number: usize, apply: bool) -> Result<()> {
+        self.verbose(&format!("Restoring backup #{}", number));
+
+        let config = PedalConfig::restore_backup(number)?;
+
+        if self.json_output {
+            let output = serde_json::json!({
+                "restored": true,
+                "backup_number": number,
+                "left": config.left,
+                "middle": config.middle,
+                "right": config.right,
+                "applied": apply,
+            });
+            println!("{}", serde_json::to_string_pretty(&output)?);
+
+            if apply {
+                // Still need to program, but skip the console output
+                return self.program(&config.left, &config.middle, &config.right, false, false);
+            }
+
+            // Save the restored config
+            config.save()?;
+            return Ok(());
+        }
+
+        self.console.print(&format!(
+            "[bold #2ecc71]Restoring configuration from backup #{}...[/]",
+            number
+        ));
+        self.console.print("");
+        self.console.print(&format!("  [bold]Left:[/]   {}", config.left));
+        self.console.print(&format!("  [bold]Middle:[/] {}", config.middle));
+        self.console.print(&format!("  [bold]Right:[/]  {}", config.right));
+        self.console.print("");
+
+        if apply {
+            self.console.print("[bold #3498db]Programming device with restored config...[/]");
+            self.console.print("");
+            self.program(&config.left, &config.middle, &config.right, false, false)
+        } else {
+            // Save the restored config
+            config.save()?;
+            self.console.print("[bold #2ecc71]✓[/] Config restored to [bold]pedals.conf[/]");
+            self.console.print("");
+            self.console.print("[dim]Run 'savant program' to apply to device, or[/]");
+            self.console.print("[dim]use 'savant config restore <N> --apply' to restore and program in one step.[/]");
+            Ok(())
         }
     }
 
