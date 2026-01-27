@@ -1075,3 +1075,107 @@ fn cli_timeout_verbose_shows_value() {
         .success()
         .stderr(predicate::str::contains("USB timeout: 5000ms"));
 }
+
+// ============================================================================
+// Config Check Tests
+// ============================================================================
+
+#[test]
+fn cli_config_check_help() {
+    savant()
+        .args(["config", "check", "--help"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Validate"))
+        .stdout(predicate::str::contains("FILE"));
+}
+
+#[test]
+fn cli_config_check_valid_config() {
+    // This test assumes there's a valid config file on the system
+    // If not, it will report file not found which is also valid behavior
+    let result = savant().args(["config", "check"]).assert();
+
+    // Either success (valid config) or failure (no config) is OK
+    // We just check that it doesn't panic
+    let output = result.get_output();
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+
+    // Should have some meaningful output
+    assert!(
+        stdout.contains("Configuration") || stderr.contains("Configuration") || stderr.contains("not found"),
+        "Expected some output about configuration"
+    );
+}
+
+#[test]
+fn cli_config_check_nonexistent_file() {
+    savant()
+        .args(["config", "check", "/nonexistent/file.conf"])
+        .assert()
+        .failure()
+        .stdout(predicate::str::contains("File not found"));
+}
+
+#[test]
+fn cli_config_check_json_valid() {
+    // Test JSON output structure on existing config
+    let result = savant()
+        .args(["--json", "config", "check"])
+        .assert();
+
+    let output = result.get_output();
+    let stdout = String::from_utf8_lossy(&output.stdout);
+
+    // If there's a config, should be valid JSON
+    if !stdout.is_empty() {
+        let json: Result<serde_json::Value, _> = serde_json::from_str(&stdout);
+        assert!(json.is_ok(), "JSON output should be valid: {}", stdout);
+
+        let json = json.unwrap();
+        assert!(json.get("valid").is_some(), "JSON should have 'valid' field");
+        assert!(json.get("file").is_some(), "JSON should have 'file' field");
+    }
+}
+
+#[test]
+fn cli_config_check_json_nonexistent() {
+    let output = savant()
+        .args(["--json", "config", "check", "/nonexistent/file.conf"])
+        .assert()
+        .failure()
+        .get_output()
+        .stdout
+        .clone();
+
+    let json: serde_json::Value = serde_json::from_slice(&output).unwrap();
+
+    assert_eq!(json.get("valid").unwrap(), false);
+    assert!(json.get("errors").unwrap().as_array().unwrap().len() > 0);
+}
+
+#[test]
+fn cli_config_check_invalid_file() {
+    // Create a temp file with invalid content
+    use std::io::Write;
+    let mut temp = tempfile::NamedTempFile::new().unwrap();
+    writeln!(temp, "left=cmd+invalid_key").unwrap();
+    writeln!(temp, "middle=cmd+a").unwrap();
+    // missing right
+
+    savant()
+        .args(["config", "check", temp.path().to_str().unwrap()])
+        .assert()
+        .failure()
+        .stdout(predicate::str::contains("Configuration invalid"))
+        .stdout(predicate::str::contains("error"));
+}
+
+#[test]
+fn cli_config_check_verbose() {
+    savant()
+        .args(["--verbose", "config", "check"])
+        .assert()
+        .stderr(predicate::str::contains("Checking config file"));
+}

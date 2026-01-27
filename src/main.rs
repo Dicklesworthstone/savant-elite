@@ -271,6 +271,36 @@ struct JsonProfileDeleteOutput {
     path: String,
 }
 
+// JSON output for config check command
+#[derive(Serialize, Clone)]
+struct JsonConfigCheckError {
+    line: Option<usize>,
+    field: Option<String>,
+    value: Option<String>,
+    error: String,
+}
+
+#[derive(Serialize)]
+struct JsonConfigCheckParsedKey {
+    action: String,
+    modifier_hex: String,
+    key_hex: String,
+}
+
+#[derive(Serialize)]
+struct JsonConfigCheckOutput {
+    valid: bool,
+    file: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    left: Option<JsonConfigCheckParsedKey>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    middle: Option<JsonConfigCheckParsedKey>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    right: Option<JsonConfigCheckParsedKey>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    errors: Vec<JsonConfigCheckError>,
+}
+
 // JSON output for doctor command
 #[derive(Serialize)]
 struct JsonDoctorCheck {
@@ -820,6 +850,13 @@ enum ConfigCommand {
         /// Delete without confirmation
         #[arg(long, short = 'f')]
         force: bool,
+    },
+
+    /// Validate a configuration file
+    Check {
+        /// Path to config file (defaults to current config)
+        #[arg(value_name = "FILE")]
+        file: Option<String>,
     },
 }
 
@@ -3254,6 +3291,7 @@ impl SavantElite {
             ConfigCommand::List => self.config_list(),
             ConfigCommand::Show { name } => self.config_show(&name),
             ConfigCommand::Delete { name, force } => self.config_delete(&name, force),
+            ConfigCommand::Check { file } => self.config_check(file.as_deref()),
         }
     }
 
@@ -3601,6 +3639,308 @@ impl SavantElite {
         }
 
         Ok(())
+    }
+
+    fn config_check(&self, file: Option<&str>) -> Result<()> {
+        self.verbose(&format!(
+            "Checking config file: {}",
+            file.unwrap_or("(default)")
+        ));
+
+        // Determine which file to check
+        let config_path = match file {
+            Some(path) => std::path::PathBuf::from(path),
+            None => PedalConfig::config_path(),
+        };
+
+        let path_display = config_path.display().to_string();
+
+        // Check if file exists
+        if !config_path.exists() {
+            let error = JsonConfigCheckError {
+                line: None,
+                field: None,
+                value: None,
+                error: "File not found".to_string(),
+            };
+
+            if self.json_output {
+                let output = JsonConfigCheckOutput {
+                    valid: false,
+                    file: path_display.clone(),
+                    left: None,
+                    middle: None,
+                    right: None,
+                    errors: vec![error],
+                };
+                println!("{}", serde_json::to_string_pretty(&output)?);
+            } else {
+                self.console
+                    .print("[bold red]✗[/] Configuration invalid");
+                self.console.print("");
+                self.console.print(&format!(
+                    "  [bold red]Error:[/] File not found: {}",
+                    path_display
+                ));
+                self.console.print("");
+                self.console.print("  [dim]Run 'savant program' to create a configuration.[/]");
+            }
+            return Err(anyhow!("Config file not found: {}", path_display));
+        }
+
+        // Read file content
+        let content = match fs::read_to_string(&config_path) {
+            Ok(c) => c,
+            Err(e) => {
+                let error = JsonConfigCheckError {
+                    line: None,
+                    field: None,
+                    value: None,
+                    error: format!("Cannot read file: {}", e),
+                };
+
+                if self.json_output {
+                    let output = JsonConfigCheckOutput {
+                        valid: false,
+                        file: path_display.clone(),
+                        left: None,
+                        middle: None,
+                        right: None,
+                        errors: vec![error],
+                    };
+                    println!("{}", serde_json::to_string_pretty(&output)?);
+                } else {
+                    self.console
+                        .print("[bold red]✗[/] Configuration invalid");
+                    self.console.print("");
+                    self.console
+                        .print(&format!("  [bold red]Error:[/] Cannot read file: {}", e));
+                }
+                return Err(anyhow!("Cannot read config file: {}", e));
+            }
+        };
+
+        // Parse and validate config
+        let mut errors: Vec<JsonConfigCheckError> = Vec::new();
+        let mut left_value: Option<String> = None;
+        let mut middle_value: Option<String> = None;
+        let mut right_value: Option<String> = None;
+        let mut left_parsed: Option<KeyAction> = None;
+        let mut middle_parsed: Option<KeyAction> = None;
+        let mut right_parsed: Option<KeyAction> = None;
+
+        // Parse each line
+        for (line_num, line) in content.lines().enumerate() {
+            let line_display = line_num + 1; // 1-indexed for display
+            let line = line.trim();
+
+            // Skip empty lines
+            if line.is_empty() {
+                continue;
+            }
+
+            // Check for proper key=value format
+            let Some((key, value)) = line.split_once('=') else {
+                errors.push(JsonConfigCheckError {
+                    line: Some(line_display),
+                    field: None,
+                    value: Some(line.to_string()),
+                    error: "Invalid syntax: expected 'key=value' format".to_string(),
+                });
+                continue;
+            };
+
+            let key = key.trim();
+            let value = value.trim();
+
+            // Check for valid field name
+            match key {
+                "left" => {
+                    left_value = Some(value.to_string());
+                    match KeyAction::from_string(value) {
+                        Ok(action) => left_parsed = Some(action),
+                        Err(e) => {
+                            errors.push(JsonConfigCheckError {
+                                line: Some(line_display),
+                                field: Some("left".to_string()),
+                                value: Some(value.to_string()),
+                                error: e.to_string(),
+                            });
+                        }
+                    }
+                }
+                "middle" => {
+                    middle_value = Some(value.to_string());
+                    match KeyAction::from_string(value) {
+                        Ok(action) => middle_parsed = Some(action),
+                        Err(e) => {
+                            errors.push(JsonConfigCheckError {
+                                line: Some(line_display),
+                                field: Some("middle".to_string()),
+                                value: Some(value.to_string()),
+                                error: e.to_string(),
+                            });
+                        }
+                    }
+                }
+                "right" => {
+                    right_value = Some(value.to_string());
+                    match KeyAction::from_string(value) {
+                        Ok(action) => right_parsed = Some(action),
+                        Err(e) => {
+                            errors.push(JsonConfigCheckError {
+                                line: Some(line_display),
+                                field: Some("right".to_string()),
+                                value: Some(value.to_string()),
+                                error: e.to_string(),
+                            });
+                        }
+                    }
+                }
+                _ => {
+                    // Unknown key - warning, not error (for future compatibility)
+                    self.verbose(&format!("Unknown key '{}' at line {} (ignored)", key, line_display));
+                }
+            }
+        }
+
+        // Check for missing required fields
+        if left_value.is_none() {
+            errors.push(JsonConfigCheckError {
+                line: None,
+                field: Some("left".to_string()),
+                value: None,
+                error: "Missing required field: left".to_string(),
+            });
+        }
+        if middle_value.is_none() {
+            errors.push(JsonConfigCheckError {
+                line: None,
+                field: Some("middle".to_string()),
+                value: None,
+                error: "Missing required field: middle".to_string(),
+            });
+        }
+        if right_value.is_none() {
+            errors.push(JsonConfigCheckError {
+                line: None,
+                field: Some("right".to_string()),
+                value: None,
+                error: "Missing required field: right".to_string(),
+            });
+        }
+
+        // Build output
+        let is_valid = errors.is_empty();
+        let error_count = errors.len();
+
+        if self.json_output {
+            let output = JsonConfigCheckOutput {
+                valid: is_valid,
+                file: path_display,
+                left: left_parsed.as_ref().map(|a| JsonConfigCheckParsedKey {
+                    action: left_value.clone().unwrap_or_default(),
+                    modifier_hex: format!("0x{:02X}", a.modifiers),
+                    key_hex: format!("0x{:02X}", a.key),
+                }),
+                middle: middle_parsed.as_ref().map(|a| JsonConfigCheckParsedKey {
+                    action: middle_value.clone().unwrap_or_default(),
+                    modifier_hex: format!("0x{:02X}", a.modifiers),
+                    key_hex: format!("0x{:02X}", a.key),
+                }),
+                right: right_parsed.as_ref().map(|a| JsonConfigCheckParsedKey {
+                    action: right_value.clone().unwrap_or_default(),
+                    modifier_hex: format!("0x{:02X}", a.modifiers),
+                    key_hex: format!("0x{:02X}", a.key),
+                }),
+                errors,
+            };
+            println!("{}", serde_json::to_string_pretty(&output)?);
+        } else if is_valid {
+            self.console
+                .print("[bold #2ecc71]✓[/] Configuration valid");
+            self.console.print("");
+
+            if self.verbose {
+                self.console.print(&format!("  [dim]File:[/] {}", path_display));
+                self.console.print("");
+            }
+
+            // Show parsed configuration
+            if let (Some(left), Some(left_a)) = (&left_value, &left_parsed) {
+                self.console.print(&format!(
+                    "  [bold #e74c3c]Left:[/]   {}",
+                    left
+                ));
+                if self.verbose {
+                    self.console.print(&format!(
+                        "          [dim]Parsed: modifier=0x{:02X}, key=0x{:02X}[/]",
+                        left_a.modifiers, left_a.key
+                    ));
+                }
+            }
+            if let (Some(middle), Some(middle_a)) = (&middle_value, &middle_parsed) {
+                self.console.print(&format!(
+                    "  [bold #f39c12]Middle:[/] {}",
+                    middle
+                ));
+                if self.verbose {
+                    self.console.print(&format!(
+                        "          [dim]Parsed: modifier=0x{:02X}, key=0x{:02X}[/]",
+                        middle_a.modifiers, middle_a.key
+                    ));
+                }
+            }
+            if let (Some(right), Some(right_a)) = (&right_value, &right_parsed) {
+                self.console.print(&format!(
+                    "  [bold #2ecc71]Right:[/]  {}",
+                    right
+                ));
+                if self.verbose {
+                    self.console.print(&format!(
+                        "          [dim]Parsed: modifier=0x{:02X}, key=0x{:02X}[/]",
+                        right_a.modifiers, right_a.key
+                    ));
+                }
+            }
+        } else {
+            self.console
+                .print("[bold red]✗[/] Configuration invalid");
+            self.console.print("");
+
+            for error in &errors {
+                let mut msg = String::new();
+                if let Some(line) = error.line {
+                    msg.push_str(&format!("Line {}: ", line));
+                }
+                if let Some(ref field) = error.field {
+                    msg.push_str(&format!("{}=", field));
+                }
+                if let Some(ref value) = error.value {
+                    msg.push_str(value);
+                }
+                if !msg.is_empty() {
+                    self.console.print(&format!("  [dim]{}[/]", msg));
+                }
+                self.console
+                    .print(&format!("  [bold red]Error:[/] {}", error.error));
+                self.console.print("");
+            }
+
+            self.console.print(&format!(
+                "[dim]{} error(s) found[/]",
+                errors.len()
+            ));
+            self.console.print("");
+            self.console
+                .print("Run [bold yellow]savant keys[/] for a complete list of valid key names.");
+        }
+
+        if is_valid {
+            Ok(())
+        } else {
+            Err(anyhow!("Configuration has {} error(s)", error_count))
+        }
     }
 
     // =========================================================================
