@@ -3066,7 +3066,7 @@ impl SavantElite {
         self.console.print(&format!(
             "[bold #9b59b6]│[/]  [bold white]PRESET: {}[/]{}[bold #9b59b6]│[/]",
             preset.name.to_uppercase(),
-            " ".repeat(53 - preset.name.len())
+            " ".repeat(53_usize.saturating_sub(preset.name.len()))
         ));
         self.console.print(
             "[bold #9b59b6]└─────────────────────────────────────────────────────────────────┘[/]",
