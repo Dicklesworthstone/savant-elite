@@ -905,3 +905,99 @@ fn cli_config_delete_help() {
         .stdout(predicate::str::contains("--force"))
         .stdout(predicate::str::contains("confirmation"));
 }
+
+// ============================================================================
+// Doctor Command Tests
+// ============================================================================
+
+#[test]
+fn cli_doctor_runs_successfully() {
+    savant()
+        .args(["doctor"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("SYSTEM DIAGNOSTICS"))
+        .stdout(predicate::str::contains("Binary"))
+        .stdout(predicate::str::contains("Platform"))
+        .stdout(predicate::str::contains("SUMMARY"));
+}
+
+#[test]
+fn cli_doctor_shows_version() {
+    savant()
+        .args(["doctor"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("savant-elite version"));
+}
+
+#[test]
+fn cli_doctor_checks_platform() {
+    savant()
+        .args(["doctor"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("macOS detected"));
+}
+
+#[test]
+fn cli_doctor_json_is_valid() {
+    let output = savant()
+        .args(["--json", "doctor"])
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+
+    let json: serde_json::Value =
+        serde_json::from_slice(&output).expect("doctor --json should produce valid JSON");
+
+    // Verify structure
+    assert!(json.get("version").is_some(), "JSON should have version");
+    assert!(json.get("platform").is_some(), "JSON should have platform");
+    assert!(json.get("arch").is_some(), "JSON should have arch");
+    assert!(json.get("checks").is_some(), "JSON should have checks");
+    assert!(json.get("summary").is_some(), "JSON should have summary");
+
+    // Verify summary structure
+    let summary = json.get("summary").unwrap();
+    assert!(summary.get("total").is_some(), "summary should have total");
+    assert!(summary.get("passed").is_some(), "summary should have passed");
+    assert!(summary.get("warnings").is_some(), "summary should have warnings");
+    assert!(summary.get("failed").is_some(), "summary should have failed");
+    assert!(summary.get("healthy").is_some(), "summary should have healthy");
+}
+
+#[test]
+fn cli_doctor_json_has_checks() {
+    let output = savant()
+        .args(["--json", "doctor"])
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+
+    let json: serde_json::Value = serde_json::from_slice(&output).unwrap();
+    let checks = json.get("checks").unwrap().as_array().unwrap();
+
+    // Should have multiple checks
+    assert!(checks.len() >= 5, "should have at least 5 checks");
+
+    // Each check should have required fields
+    for check in checks {
+        assert!(check.get("name").is_some(), "check should have name");
+        assert!(check.get("status").is_some(), "check should have status");
+        assert!(check.get("message").is_some(), "check should have message");
+    }
+}
+
+#[test]
+fn cli_doctor_help() {
+    savant()
+        .args(["doctor", "--help"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("diagnostics"));
+}
