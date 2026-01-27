@@ -207,6 +207,12 @@ impl PedalConfig {
     fn restore_backup(index: usize) -> Result<Self> {
         let backups = Self::list_backups();
 
+        if backups.is_empty() {
+            return Err(anyhow!(
+                "No configuration history available. History is created when you program the device or load a profile."
+            ));
+        }
+
         if index == 0 || index > backups.len() {
             return Err(anyhow!(
                 "Invalid backup number {}. Valid range: 1-{}",
@@ -4142,21 +4148,16 @@ impl SavantElite {
 
         let config = PedalConfig::restore_backup(number)?;
 
-        if self.json_output {
+        // JSON output only when NOT applying (program() doesn't support JSON mode)
+        if self.json_output && !apply {
             let output = serde_json::json!({
                 "restored": true,
                 "backup_number": number,
                 "left": config.left,
                 "middle": config.middle,
                 "right": config.right,
-                "applied": apply,
             });
             println!("{}", serde_json::to_string_pretty(&output)?);
-
-            if apply {
-                // Still need to program, but skip the console output
-                return self.program(&config.left, &config.middle, &config.right, false, false);
-            }
 
             // Save the restored config
             config.save()?;
