@@ -162,6 +162,86 @@ struct JsonStatusOutput {
     ready_to_program: bool,
 }
 
+// Built-in preset configurations for common use cases
+#[derive(Clone)]
+struct Preset {
+    name: &'static str,
+    description: &'static str,
+    left: &'static str,
+    middle: &'static str,
+    right: &'static str,
+}
+
+impl Preset {
+    const fn new(
+        name: &'static str,
+        description: &'static str,
+        left: &'static str,
+        middle: &'static str,
+        right: &'static str,
+    ) -> Self {
+        Self {
+            name,
+            description,
+            left,
+            middle,
+            right,
+        }
+    }
+}
+
+// Built-in presets - curated for common workflows
+const PRESETS: &[Preset] = &[
+    Preset::new(
+        "copy-paste",
+        "Copy/Select/Paste workflow - the most universally useful configuration",
+        "cmd+c",
+        "cmd+a",
+        "cmd+v",
+    ),
+    Preset::new(
+        "undo-redo",
+        "Undo/Select/Redo workflow for editing",
+        "cmd+z",
+        "cmd+a",
+        "shift+cmd+z",
+    ),
+    Preset::new(
+        "browser",
+        "Browser navigation - back/new tab/forward",
+        "cmd+[",
+        "cmd+t",
+        "cmd+]",
+    ),
+    Preset::new(
+        "zoom",
+        "Zoom video calls - mute/video/leave (macOS shortcuts)",
+        "cmd+shift+a",
+        "cmd+shift+v",
+        "cmd+w",
+    ),
+];
+
+fn find_preset(name: &str) -> Option<&'static Preset> {
+    let name_lower = name.to_lowercase();
+    PRESETS.iter().find(|p| p.name == name_lower)
+}
+
+// JSON output for presets
+#[derive(Serialize)]
+struct JsonPreset {
+    name: String,
+    description: String,
+    left: String,
+    middle: String,
+    right: String,
+}
+
+#[derive(Serialize)]
+struct JsonPresetListOutput {
+    presets: Vec<JsonPreset>,
+}
+
 const KINESIS_VID: u16 = 0x05F3;
 const SAVANT_ELITE_PID: u16 = 0x030C; // Normal "play" mode PID
 const PROGRAMMING_PID: u16 = 0x0232; // Programming mode PID (from driver INF)
@@ -570,6 +650,25 @@ enum Commands {
         /// Shell to generate completions for
         #[arg(value_enum)]
         shell: Shell,
+    },
+
+    /// Apply a preset configuration (built-in pedal mappings for common use cases)
+    Preset {
+        /// Name of the preset to apply (e.g., "copy-paste", "undo-redo", "browser", "zoom")
+        #[arg(value_name = "NAME")]
+        name: Option<String>,
+
+        /// List all available presets
+        #[arg(long, short = 'l')]
+        list: bool,
+
+        /// Show details of a specific preset without applying it
+        #[arg(long)]
+        show: bool,
+
+        /// Dry run - show what would be programmed without writing to device
+        #[arg(long)]
+        dry_run: bool,
     },
 }
 
@@ -2815,6 +2914,186 @@ impl SavantElite {
 
         Ok(())
     }
+
+    fn preset(
+        &self,
+        name: Option<&str>,
+        list: bool,
+        show: bool,
+        dry_run: bool,
+    ) -> Result<()> {
+        // Handle --list flag
+        if list {
+            return self.list_presets();
+        }
+
+        // All other operations require a preset name
+        let Some(preset_name) = name else {
+            if self.json_output {
+                let output = JsonPresetListOutput {
+                    presets: PRESETS
+                        .iter()
+                        .map(|p| JsonPreset {
+                            name: p.name.to_string(),
+                            description: p.description.to_string(),
+                            left: p.left.to_string(),
+                            middle: p.middle.to_string(),
+                            right: p.right.to_string(),
+                        })
+                        .collect(),
+                };
+                println!("{}", serde_json::to_string_pretty(&output)?);
+            } else {
+                self.console.print("[bold red]Error:[/] Missing preset name");
+                self.console.print("");
+                self.console
+                    .print("Usage: [bold yellow]savant preset <NAME>[/]");
+                self.console.print("");
+                self.console
+                    .print("Run [bold yellow]savant preset --list[/] to see available presets.");
+            }
+            return Ok(());
+        };
+
+        // Look up the preset
+        let Some(preset) = find_preset(preset_name) else {
+            if self.json_output {
+                let err = serde_json::json!({
+                    "error": "unknown_preset",
+                    "message": format!("Unknown preset: '{}'", preset_name),
+                    "available": PRESETS.iter().map(|p| p.name).collect::<Vec<_>>()
+                });
+                println!("{}", serde_json::to_string_pretty(&err)?);
+            } else {
+                self.console
+                    .print(&format!("[bold red]Error:[/] Unknown preset: '{}'", preset_name));
+                self.console.print("");
+                self.console.print("[bold cyan]Available presets:[/]");
+                for p in PRESETS {
+                    self.console
+                        .print(&format!("  [yellow]{}[/]  {}", p.name, p.description));
+                }
+            }
+            return Err(anyhow!("Unknown preset: '{}'", preset_name));
+        };
+
+        // Handle --show flag
+        if show {
+            return self.show_preset(preset);
+        }
+
+        // Apply the preset (program the device)
+        self.verbose(&format!("Applying preset: {}", preset.name));
+        self.program(preset.left, preset.middle, preset.right, dry_run, false)
+    }
+
+    fn list_presets(&self) -> Result<()> {
+        if self.json_output {
+            let output = JsonPresetListOutput {
+                presets: PRESETS
+                    .iter()
+                    .map(|p| JsonPreset {
+                        name: p.name.to_string(),
+                        description: p.description.to_string(),
+                        left: p.left.to_string(),
+                        middle: p.middle.to_string(),
+                        right: p.right.to_string(),
+                    })
+                    .collect(),
+            };
+            println!("{}", serde_json::to_string_pretty(&output)?);
+            return Ok(());
+        }
+
+        self.print_banner();
+
+        self.console.print(
+            "[bold #3498db]┌─────────────────────────────────────────────────────────────────┐[/]",
+        );
+        self.console.print(
+            "[bold #3498db]│[/]  [bold white]AVAILABLE PRESETS[/]                                           [bold #3498db]│[/]",
+        );
+        self.console.print(
+            "[bold #3498db]└─────────────────────────────────────────────────────────────────┘[/]",
+        );
+        self.console.print("");
+
+        for preset in PRESETS {
+            self.console.print(&format!(
+                "  [bold yellow]{}[/]",
+                preset.name
+            ));
+            self.console.print(&format!(
+                "    [dim]{}[/]",
+                preset.description
+            ));
+            self.console.print(&format!(
+                "    Left: [cyan]{}[/]  Middle: [cyan]{}[/]  Right: [cyan]{}[/]",
+                preset.left, preset.middle, preset.right
+            ));
+            self.console.print("");
+        }
+
+        self.console.print("[bold #2ecc71]Usage:[/]");
+        self.console
+            .print("  [yellow]savant preset copy-paste[/]        Apply the copy-paste preset");
+        self.console
+            .print("  [yellow]savant preset browser --dry-run[/] Preview browser preset");
+        self.console
+            .print("  [yellow]savant preset zoom --show[/]       Show zoom preset details");
+
+        Ok(())
+    }
+
+    fn show_preset(&self, preset: &Preset) -> Result<()> {
+        if self.json_output {
+            let output = JsonPreset {
+                name: preset.name.to_string(),
+                description: preset.description.to_string(),
+                left: preset.left.to_string(),
+                middle: preset.middle.to_string(),
+                right: preset.right.to_string(),
+            };
+            println!("{}", serde_json::to_string_pretty(&output)?);
+            return Ok(());
+        }
+
+        self.print_banner();
+
+        self.console.print(
+            "[bold #9b59b6]┌─────────────────────────────────────────────────────────────────┐[/]",
+        );
+        self.console.print(&format!(
+            "[bold #9b59b6]│[/]  [bold white]PRESET: {}[/]{}[bold #9b59b6]│[/]",
+            preset.name.to_uppercase(),
+            " ".repeat(53 - preset.name.len())
+        ));
+        self.console.print(
+            "[bold #9b59b6]└─────────────────────────────────────────────────────────────────┘[/]",
+        );
+        self.console.print("");
+
+        self.console.print(&format!(
+            "  [dim]{}[/]",
+            preset.description
+        ));
+        self.console.print("");
+
+        // Show the pedal visualization
+        self.print_pedal_visualization(preset.left, preset.middle, preset.right);
+
+        self.console.print("");
+        self.console.print(&format!(
+            "To apply: [bold yellow]savant preset {}[/]",
+            preset.name
+        ));
+        self.console.print(&format!(
+            "Preview:  [bold yellow]savant preset {} --dry-run[/]",
+            preset.name
+        ));
+
+        Ok(())
+    }
 }
 
 fn main() -> Result<()> {
@@ -2864,6 +3143,14 @@ fn main() -> Result<()> {
             let mut cmd = Cli::command();
             let name = cmd.get_name().to_string();
             generate(shell, &mut cmd, name, &mut std::io::stdout());
+        }
+        Commands::Preset {
+            name,
+            list,
+            show,
+            dry_run,
+        } => {
+            savant.preset(name.as_deref(), list, show, dry_run)?;
         }
     }
 

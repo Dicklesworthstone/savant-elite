@@ -646,3 +646,125 @@ fn cli_json_with_verbose() {
         .stdout(predicate::str::contains("\"device\""))
         .stderr(predicate::str::contains("[verbose]"));
 }
+
+// ============================================================================
+// Preset Command Tests
+// ============================================================================
+
+#[test]
+fn cli_preset_list_shows_all_presets() {
+    savant()
+        .args(["preset", "--list"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("AVAILABLE PRESETS"))
+        .stdout(predicate::str::contains("copy-paste"))
+        .stdout(predicate::str::contains("undo-redo"))
+        .stdout(predicate::str::contains("browser"))
+        .stdout(predicate::str::contains("zoom"));
+}
+
+#[test]
+fn cli_preset_list_json_is_valid() {
+    let output = savant()
+        .args(["--json", "preset", "--list"])
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+
+    let json: serde_json::Value =
+        serde_json::from_slice(&output).expect("preset --list --json should produce valid JSON");
+
+    // Verify structure
+    let presets = json.get("presets").expect("JSON should have presets field");
+    assert!(presets.is_array(), "presets should be an array");
+
+    let presets_arr = presets.as_array().unwrap();
+    assert!(presets_arr.len() >= 4, "should have at least 4 presets");
+
+    // Verify first preset has required fields
+    let first = &presets_arr[0];
+    assert!(first.get("name").is_some(), "preset should have name");
+    assert!(
+        first.get("description").is_some(),
+        "preset should have description"
+    );
+    assert!(first.get("left").is_some(), "preset should have left");
+    assert!(first.get("middle").is_some(), "preset should have middle");
+    assert!(first.get("right").is_some(), "preset should have right");
+}
+
+#[test]
+fn cli_preset_show_displays_details() {
+    savant()
+        .args(["preset", "copy-paste", "--show"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("PRESET: COPY-PASTE"))
+        // Visualization shows formatted keys (⌘C instead of cmd+c)
+        .stdout(predicate::str::contains("To apply: savant preset copy-paste"));
+}
+
+#[test]
+fn cli_preset_show_json_is_valid() {
+    let output = savant()
+        .args(["--json", "preset", "copy-paste", "--show"])
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+
+    let json: serde_json::Value =
+        serde_json::from_slice(&output).expect("preset --show --json should produce valid JSON");
+
+    assert_eq!(json.get("name").unwrap(), "copy-paste");
+    assert_eq!(json.get("left").unwrap(), "cmd+c");
+    assert_eq!(json.get("middle").unwrap(), "cmd+a");
+    assert_eq!(json.get("right").unwrap(), "cmd+v");
+}
+
+#[test]
+fn cli_preset_rejects_unknown_name() {
+    savant()
+        .args(["preset", "invalid-preset-name"])
+        .assert()
+        .failure()
+        .stdout(predicate::str::contains("Unknown preset"))
+        .stdout(predicate::str::contains("Available presets"));
+}
+
+#[test]
+fn cli_preset_missing_name_shows_usage() {
+    savant()
+        .args(["preset"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Missing preset name"))
+        .stdout(predicate::str::contains("savant preset --list"));
+}
+
+#[test]
+fn cli_preset_help() {
+    savant()
+        .args(["preset", "--help"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("--list"))
+        .stdout(predicate::str::contains("--show"))
+        .stdout(predicate::str::contains("--dry-run"))
+        .stdout(predicate::str::contains("preset configuration"));
+}
+
+#[test]
+fn cli_preset_dry_run_works() {
+    // --dry-run should show configuration without error (device mode check happens later)
+    savant()
+        .args(["preset", "browser", "--dry-run"])
+        .assert()
+        .success()
+        // Visualization shows formatted keys - just verify it shows the pedal visualization
+        .stdout(predicate::str::contains("YOUR PEDAL CONFIGURATION"));
+}
