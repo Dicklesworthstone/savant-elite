@@ -1152,7 +1152,7 @@ fn cli_config_check_json_nonexistent() {
     let json: serde_json::Value = serde_json::from_slice(&output).unwrap();
 
     assert_eq!(json.get("valid").unwrap(), false);
-    assert!(json.get("errors").unwrap().as_array().unwrap().len() > 0);
+    assert!(!json.get("errors").unwrap().as_array().unwrap().is_empty());
 }
 
 #[test]
