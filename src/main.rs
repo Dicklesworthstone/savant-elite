@@ -1,5 +1,6 @@
 use anyhow::{anyhow, Context, Result};
-use clap::{Parser, Subcommand};
+use clap::{CommandFactory, Parser, Subcommand};
+use clap_complete::{generate, Shell};
 use hidapi::{HidApi, HidDevice};
 use rich_rust::markup;
 use rich_rust::prelude::*;
@@ -502,6 +503,13 @@ enum Commands {
         /// Output in JSON format for scripting
         #[arg(long)]
         json: bool,
+    },
+
+    /// Generate shell completion scripts
+    Completions {
+        /// Shell to generate completions for
+        #[arg(value_enum)]
+        shell: Shell,
     },
 }
 
@@ -2610,6 +2618,11 @@ fn main() -> Result<()> {
         }
         Commands::Keys { json } => {
             savant.list_keys(json)?;
+        }
+        Commands::Completions { shell } => {
+            let mut cmd = Cli::command();
+            let name = cmd.get_name().to_string();
+            generate(shell, &mut cmd, name, &mut std::io::stdout());
         }
     }
 

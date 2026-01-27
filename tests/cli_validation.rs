@@ -458,3 +458,60 @@ fn cli_keys_help() {
         .stdout(predicate::str::contains("--json"))
         .stdout(predicate::str::contains("List all valid key names"));
 }
+
+// ============================================================================
+// Completions Command Tests
+// ============================================================================
+
+#[test]
+fn cli_completions_zsh() {
+    savant()
+        .args(["completions", "zsh"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("#compdef savant"))
+        .stdout(predicate::str::contains("_savant"));
+}
+
+#[test]
+fn cli_completions_bash() {
+    savant()
+        .args(["completions", "bash"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("_savant()"))
+        .stdout(predicate::str::contains("COMPREPLY"));
+}
+
+#[test]
+fn cli_completions_fish() {
+    savant()
+        .args(["completions", "fish"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("__fish_savant"))
+        .stdout(predicate::str::contains("complete -c savant"));
+}
+
+#[test]
+fn cli_completions_help() {
+    savant()
+        .args(["completions", "--help"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(
+            "Generate shell completion scripts",
+        ))
+        .stdout(predicate::str::contains("bash"))
+        .stdout(predicate::str::contains("zsh"))
+        .stdout(predicate::str::contains("fish"));
+}
+
+#[test]
+fn cli_completions_rejects_invalid_shell() {
+    savant()
+        .args(["completions", "invalid"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("invalid value"));
+}
