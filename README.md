@@ -5,7 +5,7 @@
 <img src="https://raw.githubusercontent.com/Dicklesworthstone/savant-elite/main/savant_elite_illustration.webp" alt="Savant Elite Foot Pedal Illustration" width="600">
 
 [![CI](https://github.com/Dicklesworthstone/savant-elite/actions/workflows/ci.yml/badge.svg)](https://github.com/Dicklesworthstone/savant-elite/actions/workflows/ci.yml)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![License: MIT](https://img.shields.io/badge/License-MIT%2BOpenAI%2FAnthropic%20Rider-blue.svg)](./LICENSE)
 [![Rust](https://img.shields.io/badge/Rust-1.70+-orange.svg)](https://www.rust-lang.org/)
 [![macOS](https://img.shields.io/badge/macOS-12+-blue.svg)](https://www.apple.com/macos/)
 
@@ -710,7 +710,7 @@ Please don't take this the wrong way, but I do not accept outside contributions 
 
 ## License
 
-MIT License. See [LICENSE](LICENSE) for details.
+MIT License (with OpenAI/Anthropic Rider). See [LICENSE](LICENSE) for details.
 
 ---
 
