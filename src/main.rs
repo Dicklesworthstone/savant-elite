@@ -183,23 +183,25 @@ impl PedalConfig {
             return Vec::new();
         }
 
-        let mut backups: Vec<(PathBuf, chrono::NaiveDateTime, Option<Self>)> = fs::read_dir(&history_dir)
-            .into_iter()
-            .flatten()
-            .filter_map(|e| e.ok())
-            .map(|e| e.path())
-            .filter(|p| p.extension().is_some_and(|ext| ext == "conf"))
-            .filter_map(|path| {
-                // Parse timestamp from filename (YYYY-MM-DD_HHMMSS.conf)
-                let stem = path.file_stem()?.to_str()?;
-                let datetime = chrono::NaiveDateTime::parse_from_str(stem, "%Y-%m-%d_%H%M%S").ok()?;
-                let config = Self::load_from(&path);
-                Some((path, datetime, config))
-            })
-            .collect();
+        let mut backups: Vec<(PathBuf, chrono::NaiveDateTime, Option<Self>)> =
+            fs::read_dir(&history_dir)
+                .into_iter()
+                .flatten()
+                .filter_map(|e| e.ok())
+                .map(|e| e.path())
+                .filter(|p| p.extension().is_some_and(|ext| ext == "conf"))
+                .filter_map(|path| {
+                    // Parse timestamp from filename (YYYY-MM-DD_HHMMSS.conf)
+                    let stem = path.file_stem()?.to_str()?;
+                    let datetime =
+                        chrono::NaiveDateTime::parse_from_str(stem, "%Y-%m-%d_%H%M%S").ok()?;
+                    let config = Self::load_from(&path);
+                    Some((path, datetime, config))
+                })
+                .collect();
 
         // Sort by timestamp, newest first
-        backups.sort_by(|a, b| b.1.cmp(&a.1));
+        backups.sort_by_key(|b| std::cmp::Reverse(b.1));
         backups
     }
 
@@ -223,9 +225,9 @@ impl PedalConfig {
 
         let (path, _, config) = &backups[index - 1];
 
-        config.clone().ok_or_else(|| {
-            anyhow!("Failed to parse backup file: {}", path.display())
-        })
+        config
+            .clone()
+            .ok_or_else(|| anyhow!("Failed to parse backup file: {}", path.display()))
     }
 }
 
@@ -481,7 +483,9 @@ fn validate_profile_name(name: &str) -> Result<()> {
     }
     // Prevent names that could cause issues
     if name.starts_with('-') || name.starts_with('_') {
-        return Err(anyhow!("Profile name cannot start with a hyphen or underscore"));
+        return Err(anyhow!(
+            "Profile name cannot start with a hyphen or underscore"
+        ));
     }
     Ok(())
 }
@@ -1700,25 +1704,21 @@ impl SavantElite {
             }
 
             match device_info.product_id() {
-                SAVANT_ELITE_PID => {
-                    if !found_play_usb && !found_play_hid {
-                        found_play_hid = true;
-                        device_details.push((
-                            "PLAY".to_string(),
-                            format!("0x{:04X}", SAVANT_ELITE_PID),
-                            format!("hidapi: {}", device_info.path().to_string_lossy()),
-                        ));
-                    }
+                SAVANT_ELITE_PID if !found_play_usb && !found_play_hid => {
+                    found_play_hid = true;
+                    device_details.push((
+                        "PLAY".to_string(),
+                        format!("0x{:04X}", SAVANT_ELITE_PID),
+                        format!("hidapi: {}", device_info.path().to_string_lossy()),
+                    ));
                 }
-                PROGRAMMING_PID => {
-                    if !found_program_usb && !found_program_hid {
-                        found_program_hid = true;
-                        device_details.push((
-                            "PROGRAM".to_string(),
-                            format!("0x{:04X}", PROGRAMMING_PID),
-                            format!("hidapi: {}", device_info.path().to_string_lossy()),
-                        ));
-                    }
+                PROGRAMMING_PID if !found_program_usb && !found_program_hid => {
+                    found_program_hid = true;
+                    device_details.push((
+                        "PROGRAM".to_string(),
+                        format!("0x{:04X}", PROGRAMMING_PID),
+                        format!("hidapi: {}", device_info.path().to_string_lossy()),
+                    ));
                 }
                 _ => {}
             }
@@ -3232,13 +3232,7 @@ impl SavantElite {
         Ok(())
     }
 
-    fn preset(
-        &self,
-        name: Option<&str>,
-        list: bool,
-        show: bool,
-        dry_run: bool,
-    ) -> Result<()> {
+    fn preset(&self, name: Option<&str>, list: bool, show: bool, dry_run: bool) -> Result<()> {
         // Handle --list flag
         if list {
             return self.list_presets();
@@ -3261,7 +3255,8 @@ impl SavantElite {
                 };
                 println!("{}", serde_json::to_string_pretty(&output)?);
             } else {
-                self.console.print("[bold red]Error:[/] Missing preset name");
+                self.console
+                    .print("[bold red]Error:[/] Missing preset name");
                 self.console.print("");
                 self.console
                     .print("Usage: [bold yellow]savant preset <NAME>[/]");
@@ -3282,8 +3277,10 @@ impl SavantElite {
                 });
                 println!("{}", serde_json::to_string_pretty(&err)?);
             } else {
-                self.console
-                    .print(&format!("[bold red]Error:[/] Unknown preset: '{}'", preset_name));
+                self.console.print(&format!(
+                    "[bold red]Error:[/] Unknown preset: '{}'",
+                    preset_name
+                ));
                 self.console.print("");
                 self.console.print("[bold cyan]Available presets:[/]");
                 for p in PRESETS {
@@ -3336,14 +3333,10 @@ impl SavantElite {
         self.console.print("");
 
         for preset in PRESETS {
-            self.console.print(&format!(
-                "  [bold yellow]{}[/]",
-                preset.name
-            ));
-            self.console.print(&format!(
-                "    [dim]{}[/]",
-                preset.description
-            ));
+            self.console
+                .print(&format!("  [bold yellow]{}[/]", preset.name));
+            self.console
+                .print(&format!("    [dim]{}[/]", preset.description));
             self.console.print(&format!(
                 "    Left: [cyan]{}[/]  Middle: [cyan]{}[/]  Right: [cyan]{}[/]",
                 preset.left, preset.middle, preset.right
@@ -3390,10 +3383,8 @@ impl SavantElite {
         );
         self.console.print("");
 
-        self.console.print(&format!(
-            "  [dim]{}[/]",
-            preset.description
-        ));
+        self.console
+            .print(&format!("  [dim]{}[/]", preset.description));
         self.console.print("");
 
         // Show the pedal visualization
@@ -3445,7 +3436,8 @@ impl SavantElite {
                 });
                 println!("{}", serde_json::to_string_pretty(&err)?);
             } else {
-                self.console.print("[bold red]Error:[/] No current configuration to save.");
+                self.console
+                    .print("[bold red]Error:[/] No current configuration to save.");
                 self.console.print("");
                 self.console
                     .print("Run [bold yellow]savant program[/] first to create a configuration.");
@@ -3500,10 +3492,8 @@ impl SavantElite {
                 "[bold #2ecc71]✓[/] Saved profile '[bold yellow]{}[/]'",
                 name
             ));
-            self.console.print(&format!(
-                "  Path: [dim]{}[/]",
-                path.display()
-            ));
+            self.console
+                .print(&format!("  Path: [dim]{}[/]", path.display()));
             self.console.print("");
             self.console.print(&format!(
                 "To load: [bold yellow]savant config load {}[/]",
@@ -3618,10 +3608,7 @@ impl SavantElite {
                 .print("  Create one with: [bold yellow]savant config save <name>[/]");
         } else {
             for (name, config) in &profiles {
-                self.console.print(&format!(
-                    "  [bold yellow]{}[/]",
-                    name
-                ));
+                self.console.print(&format!("  [bold yellow]{}[/]", name));
                 self.console.print(&format!(
                     "    Left: [cyan]{}[/]  Middle: [cyan]{}[/]  Right: [cyan]{}[/]",
                     config.left, config.middle, config.right
@@ -3630,10 +3617,8 @@ impl SavantElite {
             }
         }
 
-        self.console.print(&format!(
-            "[dim]Profiles directory: {}[/]",
-            dir.display()
-        ));
+        self.console
+            .print(&format!("[dim]Profiles directory: {}[/]", dir.display()));
 
         Ok(())
     }
@@ -3809,15 +3794,15 @@ impl SavantElite {
                 };
                 println!("{}", serde_json::to_string_pretty(&output)?);
             } else {
-                self.console
-                    .print("[bold red]✗[/] Configuration invalid");
+                self.console.print("[bold red]✗[/] Configuration invalid");
                 self.console.print("");
                 self.console.print(&format!(
                     "  [bold red]Error:[/] File not found: {}",
                     path_display
                 ));
                 self.console.print("");
-                self.console.print("  [dim]Run 'savant program' to create a configuration.[/]");
+                self.console
+                    .print("  [dim]Run 'savant program' to create a configuration.[/]");
             }
             return Err(anyhow!("Config file not found: {}", path_display));
         }
@@ -3844,8 +3829,7 @@ impl SavantElite {
                     };
                     println!("{}", serde_json::to_string_pretty(&output)?);
                 } else {
-                    self.console
-                        .print("[bold red]✗[/] Configuration invalid");
+                    self.console.print("[bold red]✗[/] Configuration invalid");
                     self.console.print("");
                     self.console
                         .print(&format!("  [bold red]Error:[/] Cannot read file: {}", e));
@@ -3933,7 +3917,10 @@ impl SavantElite {
                 }
                 _ => {
                     // Unknown key - warning, not error (for future compatibility)
-                    self.verbose(&format!("Unknown key '{}' at line {} (ignored)", key, line_display));
+                    self.verbose(&format!(
+                        "Unknown key '{}' at line {} (ignored)",
+                        key, line_display
+                    ));
                 }
             }
         }
@@ -3991,21 +3978,19 @@ impl SavantElite {
             };
             println!("{}", serde_json::to_string_pretty(&output)?);
         } else if is_valid {
-            self.console
-                .print("[bold #2ecc71]✓[/] Configuration valid");
+            self.console.print("[bold #2ecc71]✓[/] Configuration valid");
             self.console.print("");
 
             if self.verbose {
-                self.console.print(&format!("  [dim]File:[/] {}", path_display));
+                self.console
+                    .print(&format!("  [dim]File:[/] {}", path_display));
                 self.console.print("");
             }
 
             // Show parsed configuration
             if let (Some(left), Some(left_a)) = (&left_value, &left_parsed) {
-                self.console.print(&format!(
-                    "  [bold #e74c3c]Left:[/]   {}",
-                    left
-                ));
+                self.console
+                    .print(&format!("  [bold #e74c3c]Left:[/]   {}", left));
                 if self.verbose {
                     self.console.print(&format!(
                         "          [dim]Parsed: modifier=0x{:02X}, key=0x{:02X}[/]",
@@ -4014,10 +3999,8 @@ impl SavantElite {
                 }
             }
             if let (Some(middle), Some(middle_a)) = (&middle_value, &middle_parsed) {
-                self.console.print(&format!(
-                    "  [bold #f39c12]Middle:[/] {}",
-                    middle
-                ));
+                self.console
+                    .print(&format!("  [bold #f39c12]Middle:[/] {}", middle));
                 if self.verbose {
                     self.console.print(&format!(
                         "          [dim]Parsed: modifier=0x{:02X}, key=0x{:02X}[/]",
@@ -4026,10 +4009,8 @@ impl SavantElite {
                 }
             }
             if let (Some(right), Some(right_a)) = (&right_value, &right_parsed) {
-                self.console.print(&format!(
-                    "  [bold #2ecc71]Right:[/]  {}",
-                    right
-                ));
+                self.console
+                    .print(&format!("  [bold #2ecc71]Right:[/]  {}", right));
                 if self.verbose {
                     self.console.print(&format!(
                         "          [dim]Parsed: modifier=0x{:02X}, key=0x{:02X}[/]",
@@ -4038,8 +4019,7 @@ impl SavantElite {
                 }
             }
         } else {
-            self.console
-                .print("[bold red]✗[/] Configuration invalid");
+            self.console.print("[bold red]✗[/] Configuration invalid");
             self.console.print("");
 
             for error in &errors {
@@ -4060,10 +4040,8 @@ impl SavantElite {
                 self.console.print("");
             }
 
-            self.console.print(&format!(
-                "[dim]{} error(s) found[/]",
-                errors.len()
-            ));
+            self.console
+                .print(&format!("[dim]{} error(s) found[/]", errors.len()));
             self.console.print("");
             self.console
                 .print("Run [bold yellow]savant keys[/] for a complete list of valid key names.");
@@ -4110,14 +4088,18 @@ impl SavantElite {
         }
 
         if backups.is_empty() {
-            self.console.print("[bold yellow]No configuration history found.[/]");
+            self.console
+                .print("[bold yellow]No configuration history found.[/]");
             self.console.print("");
-            self.console.print("[dim]History is created automatically when you program the device[/]");
-            self.console.print("[dim]or load a profile. Each change creates a backup.[/]");
+            self.console
+                .print("[dim]History is created automatically when you program the device[/]");
+            self.console
+                .print("[dim]or load a profile. Each change creates a backup.[/]");
             return Ok(());
         }
 
-        self.console.print("[bold #3498db]CONFIG HISTORY[/] [dim](most recent first)[/]");
+        self.console
+            .print("[bold #3498db]CONFIG HISTORY[/] [dim](most recent first)[/]");
         self.console.print("");
 
         for (i, (_path, datetime, config)) in backups.iter().enumerate() {
@@ -4137,8 +4119,11 @@ impl SavantElite {
         }
 
         self.console.print("");
-        self.console.print("[dim]Use 'savant config restore <N>' to restore a previous config.[/]");
-        self.console.print("[dim]Use 'savant config restore <N> --apply' to restore and program device.[/]");
+        self.console
+            .print("[dim]Use 'savant config restore <N>' to restore a previous config.[/]");
+        self.console.print(
+            "[dim]Use 'savant config restore <N> --apply' to restore and program device.[/]",
+        );
 
         Ok(())
     }
@@ -4169,21 +4154,27 @@ impl SavantElite {
             number
         ));
         self.console.print("");
-        self.console.print(&format!("  [bold]Left:[/]   {}", config.left));
-        self.console.print(&format!("  [bold]Middle:[/] {}", config.middle));
-        self.console.print(&format!("  [bold]Right:[/]  {}", config.right));
+        self.console
+            .print(&format!("  [bold]Left:[/]   {}", config.left));
+        self.console
+            .print(&format!("  [bold]Middle:[/] {}", config.middle));
+        self.console
+            .print(&format!("  [bold]Right:[/]  {}", config.right));
         self.console.print("");
 
         if apply {
-            self.console.print("[bold #3498db]Programming device with restored config...[/]");
+            self.console
+                .print("[bold #3498db]Programming device with restored config...[/]");
             self.console.print("");
             self.program(&config.left, &config.middle, &config.right, false, false)
         } else {
             // Save the restored config
             config.save()?;
-            self.console.print("[bold #2ecc71]✓[/] Config restored to [bold]pedals.conf[/]");
+            self.console
+                .print("[bold #2ecc71]✓[/] Config restored to [bold]pedals.conf[/]");
             self.console.print("");
-            self.console.print("[dim]Run 'savant program' to apply to device, or[/]");
+            self.console
+                .print("[dim]Run 'savant program' to apply to device, or[/]");
             self.console.print("[dim]use 'savant config restore <N> --apply' to restore and program in one step.[/]");
             Ok(())
         }
@@ -4278,13 +4269,18 @@ impl SavantElite {
                     "  [bold #2ecc71]✓[/] All {} checks passed{}",
                     total,
                     if warnings > 0 {
-                        format!(" ({} warning{})", warnings, if warnings == 1 { "" } else { "s" })
+                        format!(
+                            " ({} warning{})",
+                            warnings,
+                            if warnings == 1 { "" } else { "s" }
+                        )
                     } else {
                         String::new()
                     }
                 ));
                 self.console.print("");
-                self.console.print("  [bold #2ecc71]Your system is ready to use savant-elite![/]");
+                self.console
+                    .print("  [bold #2ecc71]Your system is ready to use savant-elite![/]");
             } else {
                 self.console.print(&format!(
                     "  [bold #e74c3c]✗[/] {} issue{} found ({} passed, {} warning{}, {} failed)",
@@ -4296,7 +4292,8 @@ impl SavantElite {
                     failed
                 ));
                 self.console.print("");
-                self.console.print("  [dim]Fix the issues above and run 'savant doctor' again.[/]");
+                self.console
+                    .print("  [dim]Fix the issues above and run 'savant doctor' again.[/]");
             }
         }
 
@@ -4310,10 +4307,8 @@ impl SavantElite {
                 "  [bold #2ecc71]✓[/] savant-elite version {}",
                 version
             ));
-            self.console.print(&format!(
-                "  [bold #2ecc71]✓[/] {} ({})",
-                platform, arch
-            ));
+            self.console
+                .print(&format!("  [bold #2ecc71]✓[/] {} ({})", platform, arch));
             self.console.print("");
         }
 
@@ -4332,13 +4327,15 @@ impl SavantElite {
         if !self.json_output {
             self.console.print("[bold cyan]Platform:[/]");
             if is_macos {
-                self.console.print("  [bold #2ecc71]✓[/] macOS detected (supported)");
+                self.console
+                    .print("  [bold #2ecc71]✓[/] macOS detected (supported)");
             } else {
                 self.console.print(&format!(
                     "  [bold #e74c3c]✗[/] {} detected (unsupported)",
                     platform
                 ));
-                self.console.print("    [dim]→ savant-elite requires macOS[/]");
+                self.console
+                    .print("    [dim]→ savant-elite requires macOS[/]");
             }
             self.console.print("");
         }
@@ -4406,7 +4403,8 @@ impl SavantElite {
 
         if program_mode {
             if !self.json_output {
-                self.console.print("  [bold #2ecc71]✓[/] Savant Elite detected");
+                self.console
+                    .print("  [bold #2ecc71]✓[/] Savant Elite detected");
                 self.console.print(&format!(
                     "  [bold #2ecc71]✓[/] Mode: [bold #f39c12]PROGRAMMING[/] (PID 0x{:04X})",
                     PROGRAMMING_PID
@@ -4418,25 +4416,34 @@ impl SavantElite {
                 name: "device".to_string(),
                 status: "pass".to_string(),
                 message: "Savant Elite detected in PROGRAMMING mode".to_string(),
-                details: Some(format!("VID=0x{:04X}, PID=0x{:04X}", KINESIS_VID, PROGRAMMING_PID)),
+                details: Some(format!(
+                    "VID=0x{:04X}, PID=0x{:04X}",
+                    KINESIS_VID, PROGRAMMING_PID
+                )),
                 suggestions: vec![],
             }
         } else if play_mode {
             if !self.json_output {
-                self.console.print("  [bold #2ecc71]✓[/] Savant Elite detected");
+                self.console
+                    .print("  [bold #2ecc71]✓[/] Savant Elite detected");
                 self.console.print(&format!(
                     "  [bold #f39c12]⚠[/] Mode: [bold #2ecc71]PLAY[/] (PID 0x{:04X})",
                     SAVANT_ELITE_PID
                 ));
-                self.console.print("    [dim]→ To program: flip switch to Program, replug USB[/]");
-                self.console.print("    [dim]→ To monitor: this mode is correct[/]");
+                self.console
+                    .print("    [dim]→ To program: flip switch to Program, replug USB[/]");
+                self.console
+                    .print("    [dim]→ To monitor: this mode is correct[/]");
                 self.console.print("");
             }
             JsonDoctorCheck {
                 name: "device".to_string(),
                 status: "warn".to_string(),
                 message: "Savant Elite detected in PLAY mode".to_string(),
-                details: Some(format!("VID=0x{:04X}, PID=0x{:04X}", KINESIS_VID, SAVANT_ELITE_PID)),
+                details: Some(format!(
+                    "VID=0x{:04X}, PID=0x{:04X}",
+                    KINESIS_VID, SAVANT_ELITE_PID
+                )),
                 suggestions: vec![
                     "To program: flip switch to Program, replug USB".to_string(),
                     "To monitor: this mode is correct".to_string(),
@@ -4444,10 +4451,13 @@ impl SavantElite {
             }
         } else {
             if !self.json_output {
-                self.console.print("  [bold #e74c3c]✗[/] No Savant Elite device found");
-                self.console.print("    [dim]→ Connect the device via USB[/]");
+                self.console
+                    .print("  [bold #e74c3c]✗[/] No Savant Elite device found");
+                self.console
+                    .print("    [dim]→ Connect the device via USB[/]");
                 self.console.print("    [dim]→ Try a different USB port[/]");
-                self.console.print("    [dim]→ Check if another app has the device open[/]");
+                self.console
+                    .print("    [dim]→ Check if another app has the device open[/]");
                 self.console.print("");
             }
             JsonDoctorCheck {
@@ -4475,11 +4485,10 @@ impl SavantElite {
             match PedalConfig::load() {
                 Some(config) => {
                     if !self.json_output {
-                        self.console.print("  [bold #2ecc71]✓[/] Config file exists and is valid");
-                        self.console.print(&format!(
-                            "    [dim]Path: {}[/]",
-                            path.display()
-                        ));
+                        self.console
+                            .print("  [bold #2ecc71]✓[/] Config file exists and is valid");
+                        self.console
+                            .print(&format!("    [dim]Path: {}[/]", path.display()));
                         self.console.print(&format!(
                             "    [dim]Config: left={}, middle={}, right={}[/]",
                             config.left, config.middle, config.right
@@ -4499,12 +4508,12 @@ impl SavantElite {
                 }
                 None => {
                     if !self.json_output {
-                        self.console.print("  [bold #f39c12]⚠[/] Config file exists but is invalid");
-                        self.console.print(&format!(
-                            "    [dim]Path: {}[/]",
-                            path.display()
-                        ));
-                        self.console.print("    [dim]→ Check file format (left=X, middle=Y, right=Z)[/]");
+                        self.console
+                            .print("  [bold #f39c12]⚠[/] Config file exists but is invalid");
+                        self.console
+                            .print(&format!("    [dim]Path: {}[/]", path.display()));
+                        self.console
+                            .print("    [dim]→ Check file format (left=X, middle=Y, right=Z)[/]");
                         self.console.print("");
                     }
                     JsonDoctorCheck {
@@ -4513,19 +4522,19 @@ impl SavantElite {
                         message: "Config file exists but is invalid".to_string(),
                         details: Some(path.display().to_string()),
                         suggestions: vec![
-                            "Check file format (left=X, middle=Y, right=Z)".to_string(),
+                            "Check file format (left=X, middle=Y, right=Z)".to_string()
                         ],
                     }
                 }
             }
         } else {
             if !self.json_output {
-                self.console.print("  [bold #f39c12]⚠[/] Config file not found (OK for first-time use)");
-                self.console.print(&format!(
-                    "    [dim]Path: {}[/]",
-                    path.display()
-                ));
-                self.console.print("    [dim]→ Run 'savant program' to create a configuration[/]");
+                self.console
+                    .print("  [bold #f39c12]⚠[/] Config file not found (OK for first-time use)");
+                self.console
+                    .print(&format!("    [dim]Path: {}[/]", path.display()));
+                self.console
+                    .print("    [dim]→ Run 'savant program' to create a configuration[/]");
                 self.console.print("");
             }
             JsonDoctorCheck {
@@ -4533,9 +4542,7 @@ impl SavantElite {
                 status: "warn".to_string(),
                 message: "Config file not found (OK for first-time use)".to_string(),
                 details: Some(path.display().to_string()),
-                suggestions: vec![
-                    "Run 'savant program' to create a configuration".to_string(),
-                ],
+                suggestions: vec!["Run 'savant program' to create a configuration".to_string()],
             }
         }
     }
@@ -4553,9 +4560,7 @@ impl SavantElite {
                 .map(|entries| {
                     entries
                         .filter_map(|e| e.ok())
-                        .filter(|e| {
-                            e.path().extension().is_some_and(|ext| ext == "conf")
-                        })
+                        .filter(|e| e.path().extension().is_some_and(|ext| ext == "conf"))
                         .count()
                 })
                 .unwrap_or(0);
@@ -4566,27 +4571,30 @@ impl SavantElite {
                     count,
                     if count == 1 { "" } else { "s" }
                 ));
-                self.console.print(&format!(
-                    "    [dim]Path: {}[/]",
-                    dir.display()
-                ));
+                self.console
+                    .print(&format!("    [dim]Path: {}[/]", dir.display()));
                 self.console.print("");
             }
             JsonDoctorCheck {
                 name: "profiles".to_string(),
                 status: "pass".to_string(),
-                message: format!("Profiles directory exists ({} profile{})", count, if count == 1 { "" } else { "s" }),
+                message: format!(
+                    "Profiles directory exists ({} profile{})",
+                    count,
+                    if count == 1 { "" } else { "s" }
+                ),
                 details: Some(dir.display().to_string()),
                 suggestions: vec![],
             }
         } else {
             if !self.json_output {
-                self.console.print("  [bold #f39c12]⚠[/] Profiles directory not found (OK for first-time use)");
-                self.console.print(&format!(
-                    "    [dim]Path: {}[/]",
-                    dir.display()
-                ));
-                self.console.print("    [dim]→ Run 'savant config save <name>' to create a profile[/]");
+                self.console.print(
+                    "  [bold #f39c12]⚠[/] Profiles directory not found (OK for first-time use)",
+                );
+                self.console
+                    .print(&format!("    [dim]Path: {}[/]", dir.display()));
+                self.console
+                    .print("    [dim]→ Run 'savant config save <name>' to create a profile[/]");
                 self.console.print("");
             }
             JsonDoctorCheck {
@@ -4594,9 +4602,7 @@ impl SavantElite {
                 status: "warn".to_string(),
                 message: "Profiles directory not found (OK for first-time use)".to_string(),
                 details: Some(dir.display().to_string()),
-                suggestions: vec![
-                    "Run 'savant config save <name>' to create a profile".to_string(),
-                ],
+                suggestions: vec!["Run 'savant config save <name>' to create a profile".to_string()],
             }
         }
     }
@@ -4618,9 +4624,12 @@ impl SavantElite {
 
                 if is_permission_error {
                     if !self.json_output {
-                        self.console.print("  [bold #e74c3c]✗[/] Input Monitoring permission may be required");
+                        self.console.print(
+                            "  [bold #e74c3c]✗[/] Input Monitoring permission may be required",
+                        );
                         self.console.print("    [dim]→ Open System Settings → Privacy & Security → Input Monitoring[/]");
-                        self.console.print("    [dim]→ Add your terminal app (Terminal, iTerm2, etc.)[/]");
+                        self.console
+                            .print("    [dim]→ Add your terminal app (Terminal, iTerm2, etc.)[/]");
                         self.console.print("    [dim]→ Restart your terminal[/]");
                         self.console.print("");
                     }
@@ -4630,7 +4639,8 @@ impl SavantElite {
                         message: "Input Monitoring permission may be required".to_string(),
                         details: Some(e.to_string()),
                         suggestions: vec![
-                            "Open System Settings → Privacy & Security → Input Monitoring".to_string(),
+                            "Open System Settings → Privacy & Security → Input Monitoring"
+                                .to_string(),
                             "Add your terminal app (Terminal, iTerm2, etc.)".to_string(),
                             "Restart your terminal".to_string(),
                         ],
@@ -4662,7 +4672,8 @@ impl SavantElite {
 
         if !devices.is_empty() {
             if !self.json_output {
-                self.console.print("  [bold #2ecc71]✓[/] HID API accessible (Input Monitoring OK)");
+                self.console
+                    .print("  [bold #2ecc71]✓[/] HID API accessible (Input Monitoring OK)");
                 self.console.print("");
             }
             JsonDoctorCheck {
@@ -4676,8 +4687,10 @@ impl SavantElite {
             // Device not found via HID, but we already checked via libusb
             // This might just mean device is in program mode (not HID)
             if !self.json_output {
-                self.console.print("  [bold #2ecc71]✓[/] HID API initialized successfully");
-                self.console.print("    [dim]Note: Device monitoring requires device in PLAY mode[/]");
+                self.console
+                    .print("  [bold #2ecc71]✓[/] HID API initialized successfully");
+                self.console
+                    .print("    [dim]Note: Device monitoring requires device in PLAY mode[/]");
                 self.console.print("");
             }
             JsonDoctorCheck {

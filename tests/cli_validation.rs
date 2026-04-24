@@ -577,7 +577,10 @@ fn cli_json_flag_accepted() {
     // Should output valid JSON (even if device not found)
     let json: serde_json::Value =
         serde_json::from_str(&stdout).expect("info --json should produce valid JSON");
-    assert!(json.get("device").is_some(), "JSON should have device field");
+    assert!(
+        json.get("device").is_some(),
+        "JSON should have device field"
+    );
 }
 
 #[test]
@@ -704,7 +707,9 @@ fn cli_preset_show_displays_details() {
         .success()
         .stdout(predicate::str::contains("PRESET: COPY-PASTE"))
         // Visualization shows formatted keys (⌘C instead of cmd+c)
-        .stdout(predicate::str::contains("To apply: savant preset copy-paste"));
+        .stdout(predicate::str::contains(
+            "To apply: savant preset copy-paste",
+        ));
 }
 
 #[test]
@@ -825,7 +830,9 @@ fn cli_config_save_rejects_invalid_name() {
         .args(["config", "save", "invalid/name"])
         .assert()
         .failure()
-        .stderr(predicate::str::contains("letters, numbers, hyphens, and underscores"));
+        .stderr(predicate::str::contains(
+            "letters, numbers, hyphens, and underscores",
+        ));
 }
 
 #[test]
@@ -971,10 +978,22 @@ fn cli_doctor_json_is_valid() {
     // Verify summary structure
     let summary = json.get("summary").unwrap();
     assert!(summary.get("total").is_some(), "summary should have total");
-    assert!(summary.get("passed").is_some(), "summary should have passed");
-    assert!(summary.get("warnings").is_some(), "summary should have warnings");
-    assert!(summary.get("failed").is_some(), "summary should have failed");
-    assert!(summary.get("healthy").is_some(), "summary should have healthy");
+    assert!(
+        summary.get("passed").is_some(),
+        "summary should have passed"
+    );
+    assert!(
+        summary.get("warnings").is_some(),
+        "summary should have warnings"
+    );
+    assert!(
+        summary.get("failed").is_some(),
+        "summary should have failed"
+    );
+    assert!(
+        summary.get("healthy").is_some(),
+        "summary should have healthy"
+    );
 }
 
 #[test]
@@ -1112,7 +1131,9 @@ fn cli_config_check_valid_config() {
 
     // Should have some meaningful output
     assert!(
-        stdout.contains("Configuration") || stderr.contains("Configuration") || stderr.contains("not found"),
+        stdout.contains("Configuration")
+            || stderr.contains("Configuration")
+            || stderr.contains("not found"),
         "Expected some output about configuration"
     );
 }
@@ -1129,9 +1150,7 @@ fn cli_config_check_nonexistent_file() {
 #[test]
 fn cli_config_check_json_valid() {
     // Test JSON output structure on existing config
-    let result = savant()
-        .args(["--json", "config", "check"])
-        .assert();
+    let result = savant().args(["--json", "config", "check"]).assert();
 
     let output = result.get_output();
     let stdout = String::from_utf8_lossy(&output.stdout);
@@ -1142,7 +1161,10 @@ fn cli_config_check_json_valid() {
         assert!(json.is_ok(), "JSON output should be valid: {}", stdout);
 
         let json = json.unwrap();
-        assert!(json.get("valid").is_some(), "JSON should have 'valid' field");
+        assert!(
+            json.get("valid").is_some(),
+            "JSON should have 'valid' field"
+        );
         assert!(json.get("file").is_some(), "JSON should have 'file' field");
     }
 }
@@ -1203,10 +1225,7 @@ fn cli_config_history_shows_help() {
 
 #[test]
 fn cli_config_history_runs() {
-    savant()
-        .args(["config", "history"])
-        .assert()
-        .success();
+    savant().args(["config", "history"]).assert().success();
 }
 
 #[test]
@@ -1260,8 +1279,9 @@ fn cli_config_restore_rejects_zero() {
         .assert()
         .failure()
         .stderr(
-            predicate::str::contains("Invalid backup number")
-                .or(predicate::str::contains("No configuration history available")),
+            predicate::str::contains("Invalid backup number").or(predicate::str::contains(
+                "No configuration history available",
+            )),
         );
 }
 
@@ -1272,7 +1292,8 @@ fn cli_config_restore_rejects_out_of_range() {
         .assert()
         .failure()
         .stderr(
-            predicate::str::contains("Invalid backup number")
-                .or(predicate::str::contains("No configuration history available")),
+            predicate::str::contains("Invalid backup number").or(predicate::str::contains(
+                "No configuration history available",
+            )),
         );
 }
