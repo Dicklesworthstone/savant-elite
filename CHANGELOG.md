@@ -6,9 +6,48 @@ Entries are grouped by tagged release (each corresponding to a [GitHub Release](
 
 ---
 
-## [Unreleased] (since v0.1.3)
+## [v0.2.0](https://github.com/Dicklesworthstone/savant-elite/releases/tag/v0.2.0) -- 2026-08-24
 
-> Changes on `main` after the [v0.1.3](https://github.com/Dicklesworthstone/savant-elite/releases/tag/v0.1.3) release. Not yet part of any GitHub Release.
+78 commits since [v0.1.3](https://github.com/Dicklesworthstone/savant-elite/releases/tag/v0.1.3) (2026-01-25). Minor bump: several new user-facing subcommands and flags, no breaking changes to existing ones.
+
+### New commands and flags
+
+- `savant doctor` -- system diagnostics for USB/HID access and device detection ([302f63f](https://github.com/Dicklesworthstone/savant-elite/commit/302f63f))
+- `savant config check` -- validate a config file and report missing or malformed fields ([fc71cdf](https://github.com/Dicklesworthstone/savant-elite/commit/fc71cdf))
+- Config profiles: save and load named pedal configurations ([9276314](https://github.com/Dicklesworthstone/savant-elite/commit/9276314))
+- Automatic config backup, plus history and restore commands ([4de1dbd](https://github.com/Dicklesworthstone/savant-elite/commit/4de1dbd))
+- `--timeout` flag for USB operation timeouts, replacing a hardcoded value ([c031daf](https://github.com/Dicklesworthstone/savant-elite/commit/c031daf))
+
+### Fixes
+
+- Use `saturating_sub` to prevent a panic on long preset names ([2e4e47a](https://github.com/Dicklesworthstone/savant-elite/commit/2e4e47a))
+- Use the configurable timeout for `read_control` during verification ([4de617a](https://github.com/Dicklesworthstone/savant-elite/commit/4de617a))
+- Clearer config-check error display for missing fields ([a0193a6](https://github.com/Dicklesworthstone/savant-elite/commit/a0193a6))
+- Better config-restore error handling and JSON output ([4ada402](https://github.com/Dicklesworthstone/savant-elite/commit/4ada402))
+- Make integration tests platform-independent ([c414b94](https://github.com/Dicklesworthstone/savant-elite/commit/c414b94))
+
+### Testing
+
+- E2E script infrastructure with logging, plus suites covering config/profile management (30 tests), doctor diagnostics (29), `savant keys` (23), and preset workflows (19).
+
+### Dependencies
+
+- Refreshed the resolver graph to latest semver-compatible versions, including `dirs` 5 -> 6 and current `clap` / `clap_complete`.
+
+### Release engineering
+
+- Built through `dsr` rather than GitHub Actions. Both macOS artifacts were verified with `file(1)` before upload to confirm each is a genuine Mach-O binary for the architecture named in its filename.
+
+### Gate
+
+- `cargo clippy --all-targets -- -D warnings`: clean
+- `cargo test`: 148 passed, 0 failed
+
+---
+
+## [Unreleased] (since v0.2.0)
+
+> Changes on `main` after the [v0.2.0](https://github.com/Dicklesworthstone/savant-elite/releases/tag/v0.2.0) release. Not yet part of any GitHub Release.
 
 ### Documentation
 
@@ -184,7 +223,7 @@ First public release with CI-built binaries for both Apple Silicon (`aarch64-app
 - Releases: <https://github.com/Dicklesworthstone/savant-elite/releases>
 - Issue tracker: <https://github.com/Dicklesworthstone/savant-elite/issues>
 
-[Unreleased]: https://github.com/Dicklesworthstone/savant-elite/compare/v0.1.3...main
+[Unreleased]: https://github.com/Dicklesworthstone/savant-elite/compare/v0.2.0...main
 [v0.1.3]: https://github.com/Dicklesworthstone/savant-elite/compare/v0.1.2...v0.1.3
 [v0.1.2]: https://github.com/Dicklesworthstone/savant-elite/compare/v0.1.1...v0.1.2
 [v0.1.1]: https://github.com/Dicklesworthstone/savant-elite/compare/d9c8ade...v0.1.1
