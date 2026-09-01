@@ -12,7 +12,7 @@ categories = ["command-line-utilities", "hardware-support"]
 [dependencies]
 clap = { version = "4", features = ["derive"] }
 clap_complete = "4"
-hidapi = "2"
+hidapi = { version = "2", features = ["macos-shared-device"] }
 rusb = "0.9"
 libusb1-sys = { version = "0.7", features = ["vendored"] }
 anyhow = "1"

@@ -1480,6 +1480,10 @@ impl SavantElite {
     fn open_keyboard_interface(&self) -> Result<HidDevice> {
         self.verbose("Initializing HID API for keyboard interface...");
         let api = HidApi::new().context("Failed to initialize HID API")?;
+        // Shared open: exclusive seize of a keyboard-class HID device fails with
+        // 0xE00002C1 on macOS. Monitor only needs to read reports.
+        #[cfg(target_os = "macos")]
+        api.set_open_exclusive(false);
 
         // Find the keyboard interface (usage page 1, usage 6)
         self.verbose("Searching for keyboard interface (usage_page=0x01, usage=0x06)...");
