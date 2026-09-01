@@ -494,6 +494,24 @@ const KINESIS_VID: u16 = 0x05F3;
 const SAVANT_ELITE_PID: u16 = 0x030C; // Normal "play" mode PID
 const PROGRAMMING_PID: u16 = 0x0232; // Programming mode PID (from driver INF)
 
+/// Initialize hidapi with the device-open mode this tool needs.
+///
+/// On macOS, hidapi seizes devices by default (`kIOHIDOptionsTypeSeizeDevice`).
+/// Seizing a keyboard-class device requires root, so it fails with IOKit
+/// `0xE00002C1` (privilege violation) even when the terminal already holds the
+/// Input Monitoring grant. Every HID path in this tool only reads reports or
+/// talks to the vendor interface; none of it needs to detach the pedal from
+/// the system HID stack. Shared mode (`kIOHIDOptionsTypeNone`) delivers the
+/// same reports and leaves the pedal's keystrokes flowing to macOS while we
+/// watch them. The setting is process-wide in hidapi and applies to every
+/// device opened after this call.
+fn new_hid_api() -> hidapi::HidResult<HidApi> {
+    let api = HidApi::new()?;
+    #[cfg(target_os = "macos")]
+    api.set_open_exclusive(false);
+    Ok(api)
+}
+
 // PI Engineering X-keys protocol commands (used by Kinesis Savant Elite)
 // These constants document the full protocol even if not all are currently used.
 #[allow(dead_code)]
@@ -1268,7 +1286,7 @@ impl SavantElite {
 
     fn find_device(&self) -> Result<()> {
         self.verbose("Initializing HID API...");
-        let api = HidApi::new().context("Failed to initialize HID API")?;
+        let api = new_hid_api().context("Failed to initialize HID API")?;
         self.verbose("HID API initialized successfully");
 
         // (mode, vid, pid, path, serial, interface, usage_page, usage)
@@ -1479,7 +1497,7 @@ impl SavantElite {
 
     fn open_keyboard_interface(&self) -> Result<HidDevice> {
         self.verbose("Initializing HID API for keyboard interface...");
-        let api = HidApi::new().context("Failed to initialize HID API")?;
+        let api = new_hid_api().context("Failed to initialize HID API")?;
 
         // Find the keyboard interface (usage page 1, usage 6)
         self.verbose("Searching for keyboard interface (usage_page=0x01, usage=0x06)...");
@@ -1694,7 +1712,7 @@ impl SavantElite {
         }
 
         // Also check HID (for play mode with interfaces)
-        let api = HidApi::new().context("Failed to initialize HID API")?;
+        let api = new_hid_api().context("Failed to initialize HID API")?;
         let mut found_play_hid = false;
         let mut found_program_hid = false;
 
@@ -1911,7 +1929,7 @@ impl SavantElite {
         );
         self.console.print("");
 
-        let api = HidApi::new()?;
+        let api = new_hid_api()?;
 
         self.console
             .print("  [bold #3498db]Scanning for Kinesis devices...[/]");
@@ -2142,7 +2160,7 @@ impl SavantElite {
             ));
         }
 
-        let api = HidApi::new().context("Failed to initialize HID API")?;
+        let api = new_hid_api().context("Failed to initialize HID API")?;
 
         let mut found = false;
         for device_info in api.device_list() {
@@ -4614,7 +4632,7 @@ impl SavantElite {
 
         // Try to initialize HID API and open a device to check permissions
         // This is a heuristic - if we can enumerate HID devices, permissions are likely OK
-        let hid_api = match HidApi::new() {
+        let hid_api = match new_hid_api() {
             Ok(api) => api,
             Err(e) => {
                 let err_str = e.to_string().to_lowercase();
@@ -4776,6 +4794,19 @@ fn main() -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Seizing a keyboard-class device on macOS needs root and fails with
+    /// IOKit 0xE00002C1 even with Input Monitoring granted, so every HID
+    /// handle this tool opens must be a shared (non-exclusive) one.
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn hid_api_opens_devices_in_shared_mode() {
+        let api = new_hid_api().expect("hidapi should initialize without a pedal attached");
+        assert!(
+            !api.get_open_exclusive(),
+            "hidapi must not seize devices; monitor would fail with 0xE00002C1"
+        );
+    }
 
     #[test]
     fn parse_key_action_cmd_c() {
