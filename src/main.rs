@@ -2331,7 +2331,15 @@ impl SavantElite {
                 );
             }
             self.console.print("");
-            return Ok(());
+            // A dry run only previews; a real run that programmed nothing must not report success (#41).
+            if dry_run {
+                return Ok(());
+            }
+            return Err(anyhow!(if play_mode_found {
+                "nothing programmed: the Savant Elite is in Play mode, not Programming mode"
+            } else {
+                "nothing programmed: no Savant Elite found"
+            }));
         };
 
         // Capture device location for disconnect detection
@@ -2771,7 +2779,9 @@ impl SavantElite {
                 self.console
                     .print("    [bold #3498db]2.[/] Run [bold #f1c40f]savant program[/] again");
                 self.console.print("");
-                return Ok(());
+                return Err(anyhow!(
+                    "programming incomplete: the device was unplugged during programming"
+                ));
             }
         }
 
@@ -2788,7 +2798,9 @@ impl SavantElite {
             self.console
                 .print("  [#95a5a6]Reconnect and run [bold #f1c40f]savant program[/] again.[/]");
             self.console.print("");
-            return Ok(());
+            return Err(anyhow!(
+                "programming incomplete: the device was unplugged before the EEPROM save"
+            ));
         }
 
         // Save to EEPROM
@@ -2944,7 +2956,7 @@ impl SavantElite {
                 "  [bold #f39c12]╭────────────────────────────────────────────────────────────╮[/]",
             );
             self.console.print(
-                "  [bold #f39c12]│[/]  [bold #f39c12]⚠[/]  [bold white]PROGRAMMING FINISHED WITH WARNINGS[/]                    [bold #f39c12]│[/]",
+                "  [bold #f39c12]│[/]  [bold #f39c12]⚠[/]  [bold white]PROGRAMMING INCOMPLETE[/]                                [bold #f39c12]│[/]",
             );
             self.console.print(
                 "  [bold #f39c12]╰────────────────────────────────────────────────────────────╯[/]",
@@ -2960,6 +2972,20 @@ impl SavantElite {
                     "  [#95a5a6]EEPROM save may have failed; changes might not persist after unplug.[/]",
                 );
             }
+            self.console.print("");
+            // The requested configuration is saved above either way (retry/`savant info`), but the
+            // process must not report a complete programming (#41).
+            return Err(anyhow!(
+                "programming incomplete: {}",
+                match (pedal_failures.is_empty(), save_success) {
+                    (false, false) => format!(
+                        "pedal(s) {} failed and the EEPROM save failed",
+                        pedal_failures.join(", ")
+                    ),
+                    (false, true) => format!("pedal(s) {} failed", pedal_failures.join(", ")),
+                    _ => "the EEPROM save failed".to_string(),
+                }
+            ));
         }
         // Show visual pedal configuration
         self.print_pedal_visualization(left, middle, right);

@@ -259,21 +259,31 @@ main() {
     # Verify checksum
     log_step "Verifying checksum..."
     local tmp_checksum="${tmp_dir}/checksum.sha256"
-    if download_file "$checksum_url" "$tmp_checksum" 2>/dev/null; then
-        local expected actual
-        expected=$(cat "$tmp_checksum" | awk '{print $1}')
-        actual=$(shasum -a 256 "$tmp_tarball" | awk '{print $1}')
-        if [[ "$expected" == "$actual" ]]; then
-            log_info "Checksum verified: ${actual:0:16}..."
-        else
-            log_error "Checksum mismatch!"
-            log_error "Expected: $expected"
-            log_error "Got:      $actual"
-            rm -rf "$tmp_dir"
-            exit 1
-        fi
+    # Every release publishes a .sha256 sidecar, so a sidecar that can't be fetched or parsed
+    # stops the install: nothing unverified is extracted or installed (#39).
+    if ! download_file "$checksum_url" "$tmp_checksum" 2>/dev/null; then
+        log_error "Failed to download the checksum: ${checksum_url}"
+        log_error "Refusing to install an unverified archive."
+        rm -rf "$tmp_dir"
+        exit 1
+    fi
+    local expected actual
+    expected=$(awk '{print $1; exit}' "$tmp_checksum")
+    if [[ ! "$expected" =~ ^[0-9a-fA-F]{64}$ ]]; then
+        log_error "The checksum file holds no SHA-256 digest: ${checksum_url}"
+        log_error "Refusing to install an unverified archive."
+        rm -rf "$tmp_dir"
+        exit 1
+    fi
+    actual=$(shasum -a 256 "$tmp_tarball" | awk '{print $1}')
+    if [[ "$expected" == "$actual" ]]; then
+        log_info "Checksum verified: ${actual:0:16}..."
     else
-        log_warn "Checksum file not found, skipping verification"
+        log_error "Checksum mismatch!"
+        log_error "Expected: $expected"
+        log_error "Got:      $actual"
+        rm -rf "$tmp_dir"
+        exit 1
     fi
 
     # Extract
