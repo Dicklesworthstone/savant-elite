@@ -24,6 +24,9 @@ TEMP_DIR=$(mktemp -d)
 trap "rm -rf $TEMP_DIR" EXIT
 
 log_info "Using temp directory: $TEMP_DIR"
+# macOS ignores XDG_CONFIG_HOME (the config dir is under $HOME/Library), so isolate HOME as well:
+# otherwise the profile tests below save and delete profiles in the real configuration.
+export HOME="$TEMP_DIR"
 export XDG_CONFIG_HOME="$TEMP_DIR"
 
 suite_start "Config and Profile Management"
@@ -203,7 +206,11 @@ test_end pass "config check --json invalid"
 # ============================================================================
 
 # Setup: create a current config in the temp environment
-CONFIG_DIR="$TEMP_DIR/savant-elite"
+if [[ "$(uname -s)" == "Darwin" ]]; then
+    CONFIG_DIR="$TEMP_DIR/Library/Application Support/savant-elite"
+else
+    CONFIG_DIR="$TEMP_DIR/savant-elite"
+fi
 mkdir -p "$CONFIG_DIR"
 cp "$FIXTURES/valid/basic.conf" "$CONFIG_DIR/pedals.conf"
 log_info "Created test config at $CONFIG_DIR/pedals.conf"

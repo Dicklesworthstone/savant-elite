@@ -87,10 +87,10 @@ run_test() {
     log_info "────────────────────────────────────────────────────────────────────"
 
     if bash "$test_path"; then
-        ((TESTS_PASSED++))
+        TESTS_PASSED=$((TESTS_PASSED + 1))
         log_pass "SUITE: $test_script completed successfully"
     else
-        ((TESTS_FAILED++))
+        TESTS_FAILED=$((TESTS_FAILED + 1))
         log_fail "SUITE: $test_script failed"
     fi
 
