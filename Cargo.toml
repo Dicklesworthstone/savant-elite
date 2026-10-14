@@ -1,6 +1,6 @@
 [package]
 name = "savant-elite"
-version = "0.2.0"
+version = "0.2.1"
 edition = "2021"
 description = "Kinesis Savant Elite foot pedal programmer for macOS"
 license = "MIT"

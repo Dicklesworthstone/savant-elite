@@ -6,6 +6,22 @@ Entries are grouped by tagged release (each corresponding to a [GitHub Release](
 
 ---
 
+## [v0.2.1](https://github.com/Dicklesworthstone/savant-elite/releases/tag/v0.2.1) -- 2026-10-14
+
+Patch release: three fixes since [v0.2.0](https://github.com/Dicklesworthstone/savant-elite/releases/tag/v0.2.0), plus dependency updates.
+
+### Fixes
+
+- macOS: open HID devices in shared mode, avoiding IOKit's `0xE00002C1` privilege violation ([d39c625](https://github.com/Dicklesworthstone/savant-elite/commit/d39c625))
+- `savant program` exits non-zero when programming is known to be incomplete: no device or a device in Play mode, unplugged mid-programming or before the EEPROM save, failed pedals, or a failed EEPROM save. A `--dry-run` preview still succeeds, and the requested configuration is still saved for retry and `savant info` ([#41](https://github.com/Dicklesworthstone/savant-elite/issues/41), [62c06b1](https://github.com/Dicklesworthstone/savant-elite/commit/62c06b1))
+- `install.sh` refuses to install when the `.sha256` sidecar can't be downloaded or holds no SHA-256 digest; it used to warn and install the unverified archive ([#39](https://github.com/Dicklesworthstone/savant-elite/issues/39), [62c06b1](https://github.com/Dicklesworthstone/savant-elite/commit/62c06b1))
+
+### Dependencies
+
+- hidapi 2.6.6 -> 2.6.7, dirs 6 -> 7, and minor/patch updates; toolchain pinned to `nightly-2026-08-31`
+
+---
+
 ## [v0.2.0](https://github.com/Dicklesworthstone/savant-elite/releases/tag/v0.2.0) -- 2026-08-24
 
 78 commits since [v0.1.3](https://github.com/Dicklesworthstone/savant-elite/releases/tag/v0.1.3) (2026-01-25). Minor bump: several new user-facing subcommands and flags, no breaking changes to existing ones.
