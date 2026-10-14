@@ -5480,4 +5480,180 @@ mod tests {
             );
         }
     }
+
+    // --- find_preset (savant_elite_rust-cc5) ---
+
+    #[test]
+    fn find_preset_returns_each_builtin_with_its_actions() {
+        let copy_paste = find_preset("copy-paste").expect("copy-paste preset");
+        assert_eq!(
+            (copy_paste.left, copy_paste.middle, copy_paste.right),
+            ("cmd+c", "cmd+a", "cmd+v")
+        );
+        for name in ["undo-redo", "browser", "zoom"] {
+            assert_eq!(find_preset(name).map(|p| p.name), Some(name));
+        }
+    }
+
+    #[test]
+    fn find_preset_is_case_insensitive() {
+        for name in ["COPY-PASTE", "Copy-Paste", "cOpY-pAsTe"] {
+            assert_eq!(find_preset(name).map(|p| p.name), Some("copy-paste"));
+        }
+    }
+
+    #[test]
+    fn find_preset_returns_none_for_unknown_names() {
+        for name in ["nonexistent", "", "copy paste", "copy-paste "] {
+            assert!(find_preset(name).is_none(), "{name:?} should not match");
+        }
+    }
+
+    #[test]
+    fn every_preset_is_findable_and_has_parseable_actions() {
+        for preset in PRESETS {
+            assert_eq!(find_preset(preset.name).map(|p| p.name), Some(preset.name));
+            for action in [preset.left, preset.middle, preset.right] {
+                assert!(
+                    KeyAction::from_string(action).is_ok(),
+                    "preset {} has an unparseable action {action:?}",
+                    preset.name
+                );
+            }
+        }
+    }
+
+    // --- validate_profile_name (savant_elite_rust-kjd) ---
+
+    #[test]
+    fn validate_profile_name_accepts_valid_names() {
+        let max = "a".repeat(64);
+        for name in [
+            "myprofile",
+            "profile123",
+            "my-profile",
+            "my_profile",
+            "a",
+            max.as_str(),
+        ] {
+            assert!(
+                validate_profile_name(name).is_ok(),
+                "{name:?} should be valid"
+            );
+        }
+    }
+
+    #[test]
+    fn validate_profile_name_rejects_empty_and_too_long() {
+        let empty = validate_profile_name("").unwrap_err().to_string();
+        assert!(empty.contains("empty"), "{empty}");
+        let long = validate_profile_name(&"a".repeat(65))
+            .unwrap_err()
+            .to_string();
+        assert!(long.contains("too long"), "{long}");
+    }
+
+    #[test]
+    fn validate_profile_name_rejects_special_characters() {
+        for name in [
+            "my profile",
+            "my/profile",
+            "my.profile",
+            "my@profile",
+            "../etc",
+            "naïve",
+        ] {
+            assert!(
+                validate_profile_name(name).is_err(),
+                "{name:?} should be rejected"
+            );
+        }
+    }
+
+    #[test]
+    fn validate_profile_name_rejects_leading_hyphen_or_underscore() {
+        for name in ["-profile", "_profile"] {
+            let err = validate_profile_name(name).unwrap_err().to_string();
+            assert!(err.contains("cannot start"), "{name:?}: {err}");
+        }
+    }
+
+    // --- profiles_dir / profile_path (savant_elite_rust-7gp) ---
+
+    #[test]
+    fn profiles_dir_ends_with_savant_elite_profiles() {
+        let dir = profiles_dir();
+        assert!(
+            dir.ends_with(std::path::Path::new("savant-elite").join("profiles")),
+            "{dir:?}"
+        );
+    }
+
+    #[test]
+    fn profile_path_is_name_dot_conf_inside_profiles_dir() {
+        for name in ["myprofile", "my-profile", "my_profile"] {
+            let path = profile_path(name);
+            assert_eq!(path.parent(), Some(profiles_dir().as_path()));
+            assert_eq!(
+                path.file_name().and_then(|f| f.to_str()),
+                Some(format!("{name}.conf").as_str())
+            );
+        }
+    }
+
+    // --- usb_hid::key_name / modifier_names (savant_elite_rust-br3) ---
+
+    #[test]
+    fn key_name_names_letters_digits_function_and_special_keys() {
+        let cases = [
+            (usb_hid::KEY_A, "A"),
+            (usb_hid::KEY_Z, "Z"),
+            (usb_hid::KEY_1, "1"),
+            (usb_hid::KEY_0, "0"),
+            (usb_hid::KEY_F1, "F1"),
+            (usb_hid::KEY_F12, "F12"),
+            (usb_hid::KEY_ENTER, "Enter"),
+            (usb_hid::KEY_ESC, "Escape"),
+            (usb_hid::KEY_TAB, "Tab"),
+            (usb_hid::KEY_SPACE, "Space"),
+            (usb_hid::KEY_LEFT, "Left"),
+            (usb_hid::KEY_RIGHT, "Right"),
+            (usb_hid::KEY_UP, "Up"),
+            (usb_hid::KEY_DOWN, "Down"),
+        ];
+        for (code, name) in cases {
+            assert_eq!(usb_hid::key_name(code), name, "code 0x{code:02X}");
+        }
+    }
+
+    #[test]
+    fn key_name_reports_none_and_unknown_codes() {
+        assert_eq!(usb_hid::key_name(0x00), "None");
+        assert_eq!(usb_hid::key_name(0xFF), "Unknown");
+    }
+
+    #[test]
+    fn modifier_names_lists_each_bit_in_order() {
+        assert!(usb_hid::modifier_names(0).is_empty());
+        let single = [
+            (usb_hid::MOD_LEFT_CTRL, "LCtrl"),
+            (usb_hid::MOD_LEFT_SHIFT, "LShift"),
+            (usb_hid::MOD_LEFT_ALT, "LAlt"),
+            (usb_hid::MOD_LEFT_GUI, "LCmd"),
+            (usb_hid::MOD_RIGHT_CTRL, "RCtrl"),
+            (usb_hid::MOD_RIGHT_SHIFT, "RShift"),
+            (usb_hid::MOD_RIGHT_ALT, "RAlt"),
+            (usb_hid::MOD_RIGHT_GUI, "RCmd"),
+        ];
+        for (bit, name) in single {
+            assert_eq!(usb_hid::modifier_names(bit), vec![name]);
+        }
+        assert_eq!(
+            usb_hid::modifier_names(
+                usb_hid::MOD_LEFT_CTRL | usb_hid::MOD_LEFT_GUI | usb_hid::MOD_RIGHT_ALT
+            ),
+            vec!["LCtrl", "LCmd", "RAlt"]
+        );
+        assert_eq!(usb_hid::modifier_names(0xFF).len(), 8);
+    }
 }
