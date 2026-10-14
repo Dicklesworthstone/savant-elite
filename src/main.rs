@@ -5656,4 +5656,73 @@ mod tests {
         );
         assert_eq!(usb_hid::modifier_names(0xFF).len(), 8);
     }
+
+    // --- PedalConfig parse/serialize edge cases (savant_elite_rust-6g1) ---
+
+    #[test]
+    fn pedal_config_parse_skips_lines_without_equals() {
+        let config =
+            PedalConfig::parse("# a comment\nleft=cmd+c\nmiddle=cmd+a\nright=cmd+v\n").unwrap();
+        assert_eq!(config.left, "cmd+c");
+    }
+
+    #[test]
+    fn pedal_config_parse_ignores_unknown_keys() {
+        let content = "left=cmd+c\nmiddle=cmd+a\nright=cmd+v\nunknown=foo\n# left=cmd+x\n";
+        let config = PedalConfig::parse(content).unwrap();
+        assert_eq!(
+            (
+                config.left.as_str(),
+                config.middle.as_str(),
+                config.right.as_str()
+            ),
+            ("cmd+c", "cmd+a", "cmd+v")
+        );
+    }
+
+    #[test]
+    fn pedal_config_parse_last_duplicate_wins() {
+        let config =
+            PedalConfig::parse("left=cmd+c\nleft=cmd+z\nmiddle=cmd+a\nright=cmd+v\n").unwrap();
+        assert_eq!(config.left, "cmd+z");
+    }
+
+    #[test]
+    fn pedal_config_parse_handles_blank_lines_anywhere() {
+        let config =
+            PedalConfig::parse("\n\nleft=cmd+c\n\nmiddle=cmd+a\n\n\nright=cmd+v\n\n").unwrap();
+        assert_eq!(
+            (
+                config.left.as_str(),
+                config.middle.as_str(),
+                config.right.as_str()
+            ),
+            ("cmd+c", "cmd+a", "cmd+v")
+        );
+    }
+
+    #[test]
+    fn pedal_config_parse_keeps_equals_signs_in_values() {
+        let config = PedalConfig::parse("left=cmd+=\nmiddle=cmd+a\nright=cmd+v\n").unwrap();
+        assert_eq!(config.left, "cmd+=");
+    }
+
+    #[test]
+    fn pedal_config_parse_treats_blank_values_as_missing() {
+        assert!(PedalConfig::parse("left=   \nmiddle=cmd+a\nright=cmd+v\n").is_none());
+    }
+
+    #[test]
+    fn pedal_config_serialize_round_trips_through_parse() {
+        let config = PedalConfig {
+            left: "ctrl+shift+a".to_string(),
+            middle: "cmd+=".to_string(),
+            right: "alt+c".to_string(),
+        };
+        let reparsed = PedalConfig::parse(&config.serialize().unwrap()).unwrap();
+        assert_eq!(
+            (reparsed.left, reparsed.middle, reparsed.right),
+            (config.left, config.middle, config.right)
+        );
+    }
 }
