@@ -270,6 +270,101 @@ Deep protocol probing for reverse engineering.
 savant probe
 ```
 
+### `savant keys`
+
+List every key name and modifier that `program`, `preset` and config files accept.
+
+```bash
+savant keys              # Grouped, human-readable list
+savant keys --json       # Machine-readable
+savant keys | grep -i f1 # Search
+```
+
+### `savant preset`
+
+Built-in mappings for common workflows. A preset programs the device just like `savant program`.
+
+```bash
+savant preset --list                # See all presets
+savant preset copy-paste --show     # Show a preset's mapping without applying it
+savant preset copy-paste --dry-run  # Preview what would be programmed
+savant preset copy-paste            # Program it (device in Programming mode)
+```
+
+| Preset | Left | Middle | Right |
+|--------|------|--------|-------|
+| `copy-paste` | `cmd+c` | `cmd+a` | `cmd+v` |
+| `undo-redo` | `cmd+z` | `cmd+a` | `shift+cmd+z` |
+| `browser` | `cmd+[` | `cmd+t` | `cmd+]` |
+| `zoom` | `cmd+shift+a` | `cmd+shift+v` | `cmd+w` |
+
+### `savant config`
+
+Save, switch between and restore pedal configurations. The current configuration lives in
+`~/Library/Application Support/savant-elite/pedals.conf` (written after each programming run),
+named profiles in `profiles/`, and automatic backups in `history/` next to it.
+
+```bash
+savant config save coding           # Save the current configuration as a profile
+savant config list                  # List saved profiles
+savant config show coding           # Show a profile's mapping
+savant config load coding --dry-run # Preview a profile
+savant config load coding           # Program the device with a profile
+savant config delete coding --force # Delete without confirmation
+savant config check                 # Validate pedals.conf (or: savant config check <file>)
+```
+
+`config save` refuses to overwrite an existing profile unless you pass `--force`.
+
+**Automatic backups.** Every time savant rewrites `pedals.conf` (after programming, or on a
+restore), the previous file is first copied to `history/YYYY-MM-DD_HHMMSS.conf`. The newest 10
+backups are kept; set `SAVANT_HISTORY_SIZE` to keep a different number.
+
+```bash
+savant config history               # List backups, newest first (1 = most recent)
+savant config restore 2             # Make backup #2 the current configuration
+savant config restore 2 --apply     # ... and program the device with it
+```
+
+### `savant doctor`
+
+Check the platform, device, HID access, configuration and profiles, with a suggested fix for
+each problem it finds.
+
+```bash
+savant doctor
+savant doctor --json
+```
+
+### `savant completions`
+
+Generate shell completions (`bash`, `zsh`, `fish`, `elvish`, `powershell`):
+
+```bash
+# Zsh (make sure ~/.zfunc is on your fpath before compinit)
+mkdir -p ~/.zfunc && savant completions zsh > ~/.zfunc/_savant
+
+# Bash
+savant completions bash > "$(brew --prefix)/etc/bash_completion.d/savant"
+
+# Fish
+savant completions fish > ~/.config/fish/completions/savant.fish
+```
+
+### Global Options
+
+| Option | Effect |
+|--------|--------|
+| `--json` | Machine-readable output for scripting (`status`, `info`, `keys`, `preset`, `config`, `doctor`) |
+| `-v`, `--verbose` | Print debugging detail, such as the USB timeout and each step taken |
+| `--timeout <MS>` | USB operation timeout in milliseconds (default `500`) |
+
+```bash
+savant status --json | jq '.ready_to_program'
+savant info --json | jq '.device.mode'
+savant --json config history | jq '.history[0]'
+```
+
 ---
 
 ## Key Mapping Reference
@@ -563,6 +658,14 @@ Rust's `Result` type and the `anyhow` crate enable clear error propagation with 
 ---
 
 ## Troubleshooting
+
+### Start here
+
+```bash
+savant doctor                               # What's wrong, with suggested fixes
+savant -v status                            # Each detection step
+savant -v program --left cmd+c --dry-run    # How each key parses (modifier and HID codes)
+```
 
 ### "No Savant Elite device found"
 
