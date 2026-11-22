@@ -132,8 +132,8 @@ impl PedalConfig {
         }
 
         // Generate timestamp-based filename
-        let now = chrono::Local::now();
-        let backup_name = format!("{}.conf", now.format("%Y-%m-%d_%H%M%S"));
+        let now = jiff::ZonedDateTime::now();
+        let backup_name = format!("{}.conf", now.strftime("%Y-%m-%d_%H%M%S"));
         let backup_path = history_dir.join(&backup_name);
 
         // Copy current config to backup
@@ -177,13 +177,13 @@ impl PedalConfig {
     }
 
     /// List all backup files with timestamps and config summaries
-    fn list_backups() -> Vec<(PathBuf, chrono::NaiveDateTime, Option<Self>)> {
+    fn list_backups() -> Vec<(PathBuf, jiff::civil::DateTime, Option<Self>)> {
         let history_dir = Self::history_dir();
         if !history_dir.exists() {
             return Vec::new();
         }
 
-        let mut backups: Vec<(PathBuf, chrono::NaiveDateTime, Option<Self>)> =
+        let mut backups: Vec<(PathBuf, jiff::civil::DateTime, Option<Self>)> =
             fs::read_dir(&history_dir)
                 .into_iter()
                 .flatten()
@@ -193,8 +193,7 @@ impl PedalConfig {
                 .filter_map(|path| {
                     // Parse timestamp from filename (YYYY-MM-DD_HHMMSS.conf)
                     let stem = path.file_stem()?.to_str()?;
-                    let datetime =
-                        chrono::NaiveDateTime::parse_from_str(stem, "%Y-%m-%d_%H%M%S").ok()?;
+                    let datetime = jiff::civil::DateTime::strptime("%Y-%m-%d_%H%M%S", stem).ok()?;
                     let config = Self::load_from(&path);
                     Some((path, datetime, config))
                 })
@@ -4110,7 +4109,7 @@ impl SavantElite {
                 .map(|(i, (path, datetime, config))| {
                     let mut entry = serde_json::json!({
                         "number": i + 1,
-                        "timestamp": datetime.format("%Y-%m-%d %H:%M:%S").to_string(),
+                        "timestamp": datetime.strftime("%Y-%m-%d %H:%M:%S").to_string(),
                         "path": path.display().to_string(),
                     });
                     if let Some(cfg) = config {
@@ -4148,7 +4147,7 @@ impl SavantElite {
 
         for (i, (_path, datetime, config)) in backups.iter().enumerate() {
             let num = format!("{:>3}.", i + 1);
-            let timestamp = datetime.format("%Y-%m-%d %H:%M:%S").to_string();
+            let timestamp = datetime.strftime("%Y-%m-%d %H:%M:%S").to_string();
 
             let summary = if let Some(cfg) = config {
                 format!("{}, {}, {}", cfg.left, cfg.middle, cfg.right)

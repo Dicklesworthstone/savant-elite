@@ -54,7 +54,7 @@ fn history_entries(home: &Path) -> Vec<String> {
 /// `YYYY-MM-DD_HHMMSS.conf`, the name `config history` and `restore` parse back.
 fn is_backup_name(name: &str) -> bool {
     name.strip_suffix(".conf")
-        .is_some_and(|stem| chrono::NaiveDateTime::parse_from_str(stem, "%Y-%m-%d_%H%M%S").is_ok())
+        .is_some_and(|stem| jiff::civil::DateTime::strptime("%Y-%m-%d_%H%M%S", stem).is_ok())
 }
 
 // ============================================================================

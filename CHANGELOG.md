@@ -6,6 +6,32 @@ Entries are grouped by tagged release (each corresponding to a [GitHub Release](
 
 ---
 
+## [v0.2.2](https://github.com/Dicklesworthstone/savant-elite/releases/tag/v0.2.2) -- 2026-11-21
+
+Patch release: comprehensive test & documentation additions since [v0.2.1](https://github.com/Dicklesworthstone/savant-elite/releases/tag/v0.2.1), security/dependency refresh (`0` `cargo audit` advisories), speed-optimized release profile (`opt-level = 3`, LTO, `codegen-units = 1`, `strip = true`), and explicit verified Rust toolchain/MSRV alignment ([#40](https://github.com/Dicklesworthstone/savant-elite/issues/40)).
+
+### Documentation & Toolchain
+
+- **MSRV & toolchain policy ([#40](https://github.com/Dicklesworthstone/savant-elite/issues/40))**: declared `rust-version = "1.99"` in `Cargo.toml`, updated `README.md` badge, Requirements, and `Via Cargo` (`cargo install savant-elite --locked`) guidance, preserved `rust-toolchain.toml` pinned to `nightly-2026-08-31` for repository checkouts (`.cargo/config.toml` `-Z threads=4`), and qualified a fresh packaged `.crate` consumer on both `aarch64-apple-darwin` and `x86_64-apple-darwin` with `rustc 1.99.0` (including vendored `libusb1-sys` C compilation, full tests, and CLI verification).
+- **README & installer**: expanded command documentation for `keys`, `preset`, `config`, `doctor`, `completions`, and global options ([c284cff](https://github.com/Dicklesworthstone/savant-elite/commit/c284cff)), and updated `install.sh` / `README.md` raw URLs from `master` to `main`.
+
+### Dependencies & Security
+
+- **Zero `cargo audit` advisories**: upgraded `rustix` `1.1.5 -> 1.1.6` (fixes `RUSTSEC-2026-0486` unsoundness), replaced unmaintained `chrono` (`RUSTSEC-2026-0543`) with `jiff 1.0.2` for backup timestamps, and updated `rich_rust` `0.2.3 -> 0.2.4`, `clap` `4.6.7 -> 4.6.9`, `clap_complete` `4.6.11 -> 4.6.12`, `lru` `0.18.5 -> 0.19.1`, `fancy-regex` `0.18.0 -> 0.20.2`, `regex` `1.13.1 -> 1.13.2`, `libc` `0.2.190 -> 0.2.191`, and transitive packages (`142 -> 127` locked crates, **0 vulnerabilities, 0 warnings**).
+- **Bundled `libusb` pin retained ([#42](https://github.com/Dicklesworthstone/savant-elite/issues/42))**: `rusb 0.9.4` + `libusb1-sys 0.7.0` (vendored `libusb 1.0.27`) remain the latest published crates.io releases; retained intentional vendored standalone linkage pending a hardware-qualified `libusb 1.0.30` upgrade on macOS Tahoe.
+
+### Performance
+
+- Added explicit `[profile.release]` (`opt-level = 3`, `lto = true`, `codegen-units = 1`, `strip = true`). Paired 30-round same-host interleaved A/B benchmarks against `v0.2.1` show **-2.8% to -5.0% faster** medians across all 6 CLI workloads (A/A noise floor `-0.6%` to `+1.3%`) and **31% smaller** stripped `arm64` binary (`4.8 MiB -> 3.3 MiB`).
+
+### Testing
+
+- Added unit tests for `find_preset`, profile names/paths, `usb_hid` helpers, and `PedalConfig` parse/serialize edge cases ([909ee54](https://github.com/Dicklesworthstone/savant-elite/commit/909ee54), [6d90cab](https://github.com/Dicklesworthstone/savant-elite/commit/6d90cab)).
+- Added config profile workflow & automatic-backup integration tests ([4340a5f](https://github.com/Dicklesworthstone/savant-elite/commit/4340a5f)) and E2E shell suites for `completions` and `--verbose` mode, fixing `tests/e2e/run_all.sh` to execute all 7 suites ([aff3bc3](https://github.com/Dicklesworthstone/savant-elite/commit/aff3bc3)).
+- Gate: `cargo fmt --check` clean, `cargo clippy --all-targets --locked -- -D warnings` 0 errors/0 warnings, `cargo test --locked --no-fail-fast` **176/176 passed**, `cargo doc --no-deps --locked` clean, all 7/7 E2E shell suites passed.
+
+---
+
 ## [v0.2.1](https://github.com/Dicklesworthstone/savant-elite/releases/tag/v0.2.1) -- 2026-10-14
 
 Patch release: three fixes since [v0.2.0](https://github.com/Dicklesworthstone/savant-elite/releases/tag/v0.2.0), plus dependency updates.

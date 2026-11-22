@@ -4,7 +4,7 @@
 # Downloads and installs savant (Kinesis Savant Elite foot pedal programmer) to your system
 #
 # Usage:
-#   curl -fsSL https://raw.githubusercontent.com/Dicklesworthstone/savant-elite/master/install.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/Dicklesworthstone/savant-elite/main/install.sh | bash
 #
 # Options (via environment variables):
 #   DEST=/path/to/dir      Install directory (default: ~/.local/bin)

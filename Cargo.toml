@@ -1,7 +1,8 @@
 [package]
 name = "savant-elite"
-version = "0.2.1"
+version = "0.2.2"
 edition = "2021"
+rust-version = "1.99"
 description = "Kinesis Savant Elite foot pedal programmer for macOS"
 license = "MIT"
 repository = "https://github.com/Dicklesworthstone/savant-elite"
@@ -10,25 +11,35 @@ keywords = ["kinesis", "foot-pedal", "usb", "hid", "macos"]
 categories = ["command-line-utilities", "hardware-support"]
 
 [dependencies]
-clap = { version = "4", features = ["derive"] }
-clap_complete = "4"
-hidapi = "2"
+clap = { version = "4.6", features = ["derive"] }
+clap_complete = "4.6"
+hidapi = "2.6"
+# Retained pin (#42): rusb 0.9.4 + libusb1-sys 0.7.0 (vendored libusb 1.0.27)
+# remain the latest published crates.io releases; keep intentional vendored
+# standalone linkage until a libusb 1.0.30 wrapper release is hardware-qualified
+# on macOS Tahoe.
 rusb = "0.9"
 libusb1-sys = { version = "0.7", features = ["vendored"] }
-anyhow = "1"
+anyhow = "1.0"
 hex = "0.4"
-rich_rust = "0.2.1"
-dirs = "7"
-serde = { version = "1", features = ["derive"] }
-serde_json = "1"
-chrono = "0.4"
+rich_rust = "0.2.4"
+dirs = "7.0"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+jiff = "1.0"
 
 [dev-dependencies]
-assert_cmd = "2"
-predicates = "3"
-tempfile = "3"
-serde_json = "1"
+assert_cmd = "2.2"
+predicates = "3.1"
+tempfile = "3.27"
+serde_json = "1.0"
 
 [[bin]]
 name = "savant"
 path = "src/main.rs"
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+strip = true

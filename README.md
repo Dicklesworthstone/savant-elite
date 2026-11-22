@@ -5,7 +5,7 @@
 <img src="https://raw.githubusercontent.com/Dicklesworthstone/savant-elite/main/savant_elite_illustration.webp" alt="Savant Elite Foot Pedal Illustration" width="600">
 
 [![License: MIT](https://img.shields.io/badge/License-MIT%2BOpenAI%2FAnthropic%20Rider-blue.svg)](./LICENSE)
-[![Rust](https://img.shields.io/badge/Rust-1.70+-orange.svg)](https://www.rust-lang.org/)
+[![Rust](https://img.shields.io/badge/Rust-1.99+-orange.svg)](https://www.rust-lang.org/)
 [![macOS](https://img.shields.io/badge/macOS-12+-blue.svg)](https://www.apple.com/macos/)
 
 **Native macOS programmer for the discontinued Kinesis Savant Elite USB foot pedal.**
@@ -15,7 +15,7 @@ Program your foot pedals directly via USB—no Windows VM, no 32-bit compatibili
 ### Quick Install
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Dicklesworthstone/savant-elite/master/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/Dicklesworthstone/savant-elite/main/install.sh | bash
 ```
 
 Auto-detects Apple Silicon vs Intel, verifies checksums, installs to `~/.local/bin`.
@@ -141,11 +141,13 @@ shasum -a 256 -c SHA256SUMS --ignore-missing
 
 ### From Source
 
+Repository checkouts pin `nightly-2026-08-31` in `rust-toolchain.toml` (used with `.cargo/config.toml`'s `-Z threads=4` parallel frontend flag):
+
 ```bash
-# Clone and build
+# Clone and build (uses rust-toolchain.toml automatically via rustup)
 git clone https://github.com/Dicklesworthstone/savant-elite.git
 cd savant-elite
-cargo build --release
+cargo build --release --locked
 
 # Install to PATH
 sudo cp target/release/savant /usr/local/bin/
@@ -153,14 +155,16 @@ sudo cp target/release/savant /usr/local/bin/
 
 ### Via Cargo
 
+Packaged crates.io builds do not apply the repository's `.cargo/config.toml` and build on stable Rust 1.99+:
+
 ```bash
-cargo install --git https://github.com/Dicklesworthstone/savant-elite.git
+cargo install savant-elite --locked
 ```
 
 ### Requirements
 
-- **macOS 12+** (tested on macOS 15 Sequoia)
-- **Rust 1.70+** (for building from source)
+- **macOS 12+** (Apple Silicon and Intel; tested on macOS 15 Sequoia)
+- **Rust 1.99+** for crates.io / packaged builds (`Cargo.toml` `rust-version = "1.99"`), or the pinned **`nightly-2026-08-31`** toolchain in `rust-toolchain.toml` when building directly from a git checkout
 - **Kinesis Savant Elite** foot pedal (VID `0x05F3`)
 
 ---

@@ -88,7 +88,7 @@ We only use **Cargo** in this project, NEVER any other package manager.
 | `rich_rust` | Rich terminal output |
 | `dirs` | Platform-standard directory paths |
 | `serde` + `serde_json` | Serialization |
-| `chrono` | Date/time utilities |
+| `jiff` | Date/time utilities |
 
 ### Dev Dependencies
 
